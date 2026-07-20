@@ -1,0 +1,258 @@
+package com.tien.identityservice.service;
+
+import java.text.ParseException;
+import java.util.Date;
+import java.util.HashSet;
+
+import com.tien.identityservice.constant.SignInProvider;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+import com.tien.identityservice.constant.EmailTemplate;
+import com.tien.identityservice.constant.OtpType;
+import com.tien.identityservice.constant.PredefinedRole;
+import com.tien.identityservice.dto.request.*;
+import com.tien.identityservice.dto.response.AuthenticationResponse;
+import com.tien.identityservice.dto.response.IntrospectResponse;
+import com.tien.identityservice.dto.response.UserResponse;
+import com.tien.identityservice.entity.Role;
+import com.tien.identityservice.entity.User;
+import com.tien.identityservice.entity.UserOtp;
+import com.tien.identityservice.exception.AppException;
+import com.tien.identityservice.exception.ErrorCode;
+import com.tien.identityservice.mapper.UserMapper;
+import com.tien.identityservice.repository.RoleRepository;
+import com.tien.identityservice.repository.UserRepository;
+
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
+
+// AuthenticationService: Service xử lý nghiệp vụ liên quan đến xác thực.
+@Slf4j
+@Service
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+@RequiredArgsConstructor
+public class AuthenticationService {
+    UserRepository userRepository;
+
+    UserMapper userMapper;
+
+    PasswordEncoder passwordEncoder;
+
+    RoleRepository roleRepository;
+
+    JwtService jwtService;
+
+    OtpService otpService;
+
+    NotificationService notificationService;
+
+    ProfileService profileService;
+
+    // Đăng ký user mới, tạo OTP, gửi email xác thực
+    @Transactional
+    public UserResponse register(UserCreationRequest request) {
+        User user = userMapper.toUser(request);
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+
+        HashSet<Role> roles = new HashSet<>();
+        roleRepository.findById(PredefinedRole.USER_ROLE).ifPresent(roles::add);
+        user.setRoles(roles);
+
+        user.setEmailVerified(false);
+        user.setIsActive(false);
+        user.setProvider(SignInProvider.LOCAL);
+
+        try {
+            user = userRepository.save(user);
+        } catch (DataIntegrityViolationException exception) {
+            throw new AppException(ErrorCode.USER_EXISTED);
+        }
+
+        // Tạo profile cho user
+        profileService.createProfileFromCreation(request, user.getId());
+
+        UserOtp userOtp = otpService.createOtp(user, OtpType.REGISTER, 15);
+
+        // Gửi email xác thực
+        notificationService.sendEmail(
+                request.getEmail(),
+                "Verify email",
+                EmailTemplate.otpEmail(request.getUsername(), userOtp.getOtpCode()));
+
+        UserResponse userCreationResponse = userMapper.toUserResponse(user);
+        userCreationResponse.setId(user.getId());
+
+        return userCreationResponse;
+    }
+
+    // Xác thực email bằng OTP, kích hoạt tài khoản
+    @Transactional
+    public void verifyUser(VerifyUserRequest verifyUserRequest) {
+        User user = userRepository
+                .findByEmail(verifyUserRequest.getEmail())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        UserOtp userOtp = otpService.findLatestOtp(user, OtpType.REGISTER);
+        otpService.validateOtp(userOtp, verifyUserRequest.getOtpCode());
+
+        user.setEmailVerified(true);
+        user.setIsActive(true);
+        userRepository.save(user);
+
+        otpService.markOtpAsUsed(userOtp);
+
+        notificationService.sendEmail(
+                verifyUserRequest.getEmail(), "Welcome to ChillNet", EmailTemplate.welcomeEmail(user.getUsername()));
+    }
+
+    // Gửi lại mã OTP xác thực
+    @Transactional
+    public void resendVerificationCode(String email) {
+        User user = userRepository.findByEmail(email).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        if (user.getIsActive() && user.isEmailVerified()) {
+            throw new AppException(ErrorCode.USER_ALREADY_VERIFIED);
+        }
+
+        otpService.checkOtpFrequency(user, OtpType.REGISTER);
+        otpService.deactivateOldOtps(user.getId(), OtpType.REGISTER);
+
+        UserOtp newOtp = otpService.createOtp(user, OtpType.REGISTER, 15);
+        notificationService.sendEmail(
+                user.getEmail(),
+                "New verification code",
+                EmailTemplate.resendVerificationEmail(user.getUsername(), newOtp.getOtpCode()));
+    }
+
+    // Kiểm tra token có hợp lệ hay không.
+    public IntrospectResponse introspect(IntrospectRequest request) throws JOSEException, ParseException {
+        String token = request.getToken();
+        boolean isValid = jwtService.isValidToken(token);
+        return IntrospectResponse.builder()
+                .valid(isValid)
+                .build();
+    }
+
+    // Xác thực username/password, trả về JWT token.
+    public AuthenticationResponse authenticate(AuthenticationRequest request) {
+        User user = userRepository
+                .findByUsernameWithRolesAndPermissions(request.getUsername())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        boolean authenticated = passwordEncoder.matches(request.getPassword(), user.getPassword());
+
+        if (!authenticated) {
+            throw new AppException(ErrorCode.WRONG_PASSWORD);
+        }
+
+        if (!user.getIsActive()) {
+            throw new AppException(ErrorCode.USER_DISABLED);
+        }
+
+        String token = jwtService.generateToken(user);
+
+        return AuthenticationResponse.builder()
+                .token(token)
+                .authenticated(true)
+                .build();
+    }
+
+    // Revoke token (đánh dấu token không còn hợp lệ)
+    public void logout(LogoutRequest request) throws ParseException, JOSEException {
+        jwtService.revokeToken(request.getToken());
+    }
+
+    // Làm mới token (revoke token cũ, tạo token mới)
+    public AuthenticationResponse refreshToken(RefreshTokenRequest request) throws JOSEException, ParseException {
+        SignedJWT signedJWT = jwtService.verifyToken(request.getToken(), true);
+        JWTClaimsSet claimsSet = signedJWT.getJWTClaimsSet();
+
+        String jit = claimsSet.getJWTID();
+        Date expiryTime = claimsSet.getExpirationTime();
+
+        if (jit == null || expiryTime == null) {
+            log.warn("Token không có JWT ID hoặc expiry time");
+            throw new AppException(ErrorCode.UNAUTHENTICATED);
+        }
+
+        // Revoke token cũ
+        jwtService.revokeTokenById(jit, expiryTime);
+
+        // Lấy user từ subject để phát token mới
+        String userId = claimsSet.getSubject();
+        if (userId == null || userId.trim().isEmpty()) {
+            log.warn("Token không có subject (userId)");
+            throw new AppException(ErrorCode.UNAUTHENTICATED);
+        }
+
+        User user = userRepository
+                .findByIdWithRolesAndPermissions(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.UNAUTHENTICATED));
+
+        String token = jwtService.generateToken(user);
+
+        return AuthenticationResponse.builder()
+                .token(token)
+                .authenticated(true)
+                .build();
+    }
+
+    // Gửi OTP để reset password (forgot password)
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        // Kiểm tra user đã verify email chưa
+        if (!user.isEmailVerified()) {
+            throw new AppException(ErrorCode.USER_NOT_EXISTED);
+        }
+
+        // Kiểm tra tần suất gửi OTP
+        otpService.checkOtpFrequency(user, OtpType.RESET_PASSWORD);
+        otpService.deactivateOldOtps(user.getId(), OtpType.RESET_PASSWORD);
+
+        // Tạo OTP mới
+        UserOtp newOtp = otpService.createOtp(user, OtpType.RESET_PASSWORD, 15);
+
+        // Gửi email với OTP
+        notificationService.sendEmail(
+                user.getEmail(),
+                "Reset Password - ChillNet",
+                EmailTemplate.resetPasswordEmail(user.getUsername(), newOtp.getOtpCode()));
+
+        log.info("Đã gửi OTP reset password cho user: {}", user.getEmail());
+    }
+
+    // Reset password với OTP
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        // Kiểm tra user đã verify email chưa
+        if (!user.isEmailVerified()) {
+            throw new AppException(ErrorCode.USER_NOT_EXISTED);
+        }
+
+        // Tìm và validate OTP
+        UserOtp userOtp = otpService.findLatestOtp(user, OtpType.RESET_PASSWORD);
+        otpService.validateOtp(userOtp, request.getOtpCode());
+
+        // Cập nhật mật khẩu mới
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        // Đánh dấu OTP đã sử dụng
+        otpService.markOtpAsUsed(userOtp);
+
+        log.info("User {} đã reset password thành công", user.getEmail());
+    }
+}

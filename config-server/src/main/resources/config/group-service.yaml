@@ -1,0 +1,34 @@
+server:
+  port: 8089
+  servlet:
+    context-path: /group
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
+spring:
+  application:
+    name: group-service
+  data:
+    mongodb:
+      uri: mongodb://root:814362@localhost:27017/group-service?authSource=admin
+  kafka:
+    bootstrap-servers: localhost:9094
+    consumer:
+      group-id: group-service-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+app:
+  services:
+    profile:
+      url: http://localhost:8082/profile
+
