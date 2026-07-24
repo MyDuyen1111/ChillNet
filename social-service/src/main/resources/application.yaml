@@ -1,6 +1,28 @@
+server:
+  port: 8087
+  servlet:
+    context-path: /social
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
 spring:
   application:
     name: social-service
-  config:
-    import: "optional:configserver:http://localhost:8888"
+  datasource:
+    url: ${DBMS_CONNECTION:jdbc:mysql://localhost:3306/social_service}
+    username: ${DBMS_USERNAME:root}
+    password: ${DBMS_PASSWORD:814362}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
 
+app:
+  services:
+    profile:
+      url: http://localhost:8082/profile

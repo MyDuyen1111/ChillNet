@@ -1,5 +1,35 @@
+server:
+  port: 8084
+  servlet:
+    context-path: /post
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
 spring:
   application:
     name: post-service
-  config:
-    import: "optional:configserver:http://localhost:8888"
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 50MB
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://root:814362@localhost:27017/post-service?authSource=admin}
+app:
+  services:
+    profile:
+      url: http://localhost:8082/profile
+    social:
+      url: http://localhost:8087/social
+    interaction:
+      url: http://localhost:8088/interaction
+    group:
+      url: http://localhost:8089/group
+    file:
+      url: http://localhost:8085/file

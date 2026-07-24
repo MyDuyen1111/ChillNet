@@ -1,5 +1,27 @@
+server:
+  port: 8082
+  servlet:
+    context-path: /profile
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
 spring:
   application:
     name: profile-service
-  config:
-    import: "optional:configserver:http://localhost:8888"
+  datasource:
+    url: ${DBMS_CONNECTION:jdbc:mysql://localhost:3306/profile_service}
+    username: ${DBMS_USERNAME:root}
+    password: ${DBMS_PASSWORD:814362}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+app:
+  services:
+    file:
+      url: http://localhost:8085/file
