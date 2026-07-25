@@ -1,0 +1,43 @@
+# Hạ tầng local cho ChillNet: MySQL + MongoDB (đã cap RAM cho máy yếu).
+# Chạy: docker compose -f docker-compose.infra.yml up -d
+# Dừng: docker compose -f docker-compose.infra.yml down
+services:
+  mysql:
+    image: mysql:8
+    container_name: chillnet-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: "814362"
+    command: --innodb-buffer-pool-size=256M
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./scripts/mysql-init:/docker-entrypoint-initdb.d:ro
+      - chillnet_mysql_data:/var/lib/mysql
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p814362"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mongodb:
+    image: mongo:6
+    container_name: chillnet-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: "814362"
+    command: --wiredTigerCacheSizeGB 0.5
+    ports:
+      - "27017:27017"
+    volumes:
+      - chillnet_mongo_data:/data/db
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ping:1}).ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  chillnet_mysql_data:
+  chillnet_mongo_data:
