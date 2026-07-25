@@ -1,12 +1,23 @@
 package com.tien.interactionservice.service;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.tien.interactionservice.dto.PageResponse;
 import com.tien.interactionservice.dto.request.CreateCommentRequest;
 import com.tien.interactionservice.dto.request.UpdateCommentRequest;
 import com.tien.interactionservice.dto.response.CommentResponse;
 import com.tien.interactionservice.dto.response.ProfileResponse;
 import com.tien.interactionservice.entity.Comment;
-import com.tien.interactionservice.event.CommentEvent;
 import com.tien.interactionservice.exception.AppException;
 import com.tien.interactionservice.exception.ErrorCode;
 import com.tien.interactionservice.mapper.CommentMapper;
@@ -14,23 +25,11 @@ import com.tien.interactionservice.repository.CommentRepository;
 import com.tien.interactionservice.repository.LikeRepository;
 import com.tien.interactionservice.repository.httpclient.PostClient;
 import com.tien.interactionservice.repository.httpclient.ProfileClient;
+
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -43,10 +42,6 @@ public class CommentService {
     ProfileClient profileClient;
     CommentMapper commentMapper;
 
-    KafkaTemplate<String, Object> kafkaTemplate;
-
-    private static final String COMMENT_TOPIC = "comment.events";
-
     @Transactional
     public CommentResponse createComment(CreateCommentRequest request) {
         String userId = getCurrentUserId();
@@ -55,8 +50,10 @@ public class CommentService {
         validatePostExists(request.getPostId());
 
         // If parent comment exists, validate it
-        if (request.getParentCommentId() != null && !request.getParentCommentId().isEmpty()) {
-            Comment parent = commentRepository.findById(request.getParentCommentId())
+        if (request.getParentCommentId() != null
+                && !request.getParentCommentId().isEmpty()) {
+            Comment parent = commentRepository
+                    .findById(request.getParentCommentId())
                     .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
             if (!parent.getPostId().equals(request.getPostId())) {
                 throw new AppException(ErrorCode.INVALID_PARENT_COMMENT);
@@ -72,9 +69,6 @@ public class CommentService {
 
         comment = commentRepository.save(comment);
 
-        // Publish event
-        publishCommentEvent(comment, "CREATED");
-
         return buildCommentResponse(comment, userId);
     }
 
@@ -89,13 +83,11 @@ public class CommentService {
                 .collect(Collectors.toList());
 
         if (!commentResponses.isEmpty()) {
-            List<String> commentIds = commentResponses.stream()
-                    .map(CommentResponse::getId)
-                    .toList();
+            List<String> commentIds =
+                    commentResponses.stream().map(CommentResponse::getId).toList();
 
             List<Comment> allReplies = commentRepository.findByParentCommentIdInOrderByCreatedAtAsc(commentIds);
-            var repliesMap = allReplies.stream()
-                    .collect(Collectors.groupingBy(Comment::getParentCommentId));
+            var repliesMap = allReplies.stream().collect(Collectors.groupingBy(Comment::getParentCommentId));
 
             commentResponses.forEach(commentResponse -> {
                 List<Comment> replies = repliesMap.getOrDefault(commentResponse.getId(), List.of());
@@ -122,14 +114,12 @@ public class CommentService {
     public CommentResponse updateComment(String commentId, UpdateCommentRequest request) {
         String userId = getCurrentUserId();
 
-        Comment comment = commentRepository.findByIdAndUserId(commentId, userId)
+        Comment comment = commentRepository
+                .findByIdAndUserId(commentId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
 
         comment.setContent(request.getContent());
         comment = commentRepository.save(comment);
-
-        // Publish event
-        publishCommentEvent(comment, "UPDATED");
 
         return buildCommentResponse(comment, userId);
     }
@@ -138,7 +128,8 @@ public class CommentService {
     public void deleteComment(String commentId) {
         String userId = getCurrentUserId();
 
-        Comment comment = commentRepository.findByIdAndUserId(commentId, userId)
+        Comment comment = commentRepository
+                .findByIdAndUserId(commentId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
 
         // Delete all replies first
@@ -150,20 +141,19 @@ public class CommentService {
 
         // Delete the comment
         commentRepository.delete(comment);
-
-        // Publish event
-        publishCommentEvent(comment, "DELETED");
     }
 
     private CommentResponse buildCommentResponse(Comment comment, String currentUserId) {
         ProfileResponse profile = getProfile(comment.getUserId());
 
         long likeCount = likeRepository.countByCommentId(comment.getId());
-        boolean isLiked = likeRepository.findByUserIdAndCommentIdAndPostIdIsNull(currentUserId, comment.getId()).isPresent();
+        boolean isLiked = likeRepository
+                .findByUserIdAndCommentIdAndPostIdIsNull(currentUserId, comment.getId())
+                .isPresent();
 
         // Map các field có thể map từ entity
         CommentResponse response = commentMapper.toCommentResponse(comment);
-        
+
         // Enrich các field không thể map
         // Hiển thị họ + tên thay vì username
         if (profile != null) {
@@ -178,13 +168,16 @@ public class CommentService {
         response.setReplyCount(0);
         response.setLikeCount((int) likeCount);
         response.setIsLiked(isLiked);
-        
+
         return response;
     }
 
     private String getDisplayName(String firstName, String lastName, String username) {
         // Nếu có cả firstName và lastName, hiển thị "firstName lastName"
-        if (firstName != null && !firstName.trim().isEmpty() && lastName != null && !lastName.trim().isEmpty()) {
+        if (firstName != null
+                && !firstName.trim().isEmpty()
+                && lastName != null
+                && !lastName.trim().isEmpty()) {
             return (firstName.trim() + " " + lastName.trim()).trim();
         }
         // Nếu chỉ có lastName, hiển thị lastName (thường là username)
@@ -222,58 +215,40 @@ public class CommentService {
         }
     }
 
-    private void publishCommentEvent(Comment comment, String eventType) {
-        try {
-            CommentEvent event = CommentEvent.builder()
-                    .commentId(comment.getId())
-                    .postId(comment.getPostId())
-                    .userId(comment.getUserId())
-                    .eventType(eventType)
-                    .timestamp(Instant.now())
-                    .build();
-            kafkaTemplate.send(COMMENT_TOPIC, event);
-            log.info("Published comment event: {} for commentId: {}", eventType, comment.getId());
-        } catch (Exception e) {
-            log.error("Error publishing comment event: {}", e.getMessage(), e);
-        }
-    }
-
     public long getCommentCountByPost(String postId) {
         return commentRepository.countByPostId(postId);
     }
 
     public CommentResponse getCommentById(String commentId) {
         String userId = getCurrentUserId();
-        Comment comment = commentRepository.findById(commentId)
-                .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
+        Comment comment =
+                commentRepository.findById(commentId).orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
         return buildCommentResponse(comment, userId);
     }
 
     public PageResponse<CommentResponse> getRepliesByCommentId(String commentId, int page, int size) {
         String userId = getCurrentUserId();
-        
+
         // Verify comment exists
-        Comment parentComment = commentRepository.findById(commentId)
-                .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
-        
+        Comment parentComment =
+                commentRepository.findById(commentId).orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
+
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by("createdAt").ascending());
-        
+
         // Get all replies for this comment
         List<Comment> allReplies = commentRepository.findByParentCommentIdOrderByCreatedAtAsc(commentId);
-        
+
         // Manual pagination since we don't have Page query
         int start = (page - 1) * size;
         int end = Math.min(start + size, allReplies.size());
-        List<Comment> paginatedReplies = start < allReplies.size() 
-                ? allReplies.subList(start, end) 
-                : List.of();
-        
+        List<Comment> paginatedReplies = start < allReplies.size() ? allReplies.subList(start, end) : List.of();
+
         List<CommentResponse> replyResponses = paginatedReplies.stream()
                 .map(reply -> buildCommentResponse(reply, userId))
                 .collect(Collectors.toList());
-        
+
         int totalPages = (int) Math.ceil((double) allReplies.size() / size);
-        
+
         return PageResponse.<CommentResponse>builder()
                 .content(replyResponses)
                 .page(page)
@@ -289,4 +264,3 @@ public class CommentService {
         return SecurityContextHolder.getContext().getAuthentication().getName();
     }
 }
-

@@ -19,6 +19,7 @@ SERVICES=(api-gateway identity-service profile-service notification-service post
   file-service chat-service social-service interaction-service group-service)
 for svc in "${SERVICES[@]}"; do
   echo "==> package $svc"
+  chmod +x "$svc/mvnw" 2>/dev/null || true
   (cd "$svc" && ./mvnw -q clean package -DskipTests)
 done
 echo "==> Build xong toàn bộ."

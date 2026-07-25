@@ -48,7 +48,7 @@ public class PostService {
     SocialClient socialClient;
     InteractionClient interactionClient;
     GroupClient groupClient;
-    ImageUploadKafkaService imageUploadKafkaService;
+    ImageUploadService imageUploadService;
 
     SavedPostRepository savedPostRepository;
 
@@ -108,7 +108,7 @@ public class PostService {
         // Nếu có images (multipart), upload chúng
         if (hasImages) {
             try {
-                List<String> uploadedImageUrls = imageUploadKafkaService.uploadPostImages(images, userId, post.getId());
+                List<String> uploadedImageUrls = imageUploadService.uploadPostImages(images, userId, post.getId());
                 post.setImageUrls(uploadedImageUrls);
                 post.setModifiedDate(Instant.now());
                 post = postRepository.save(post);
@@ -355,7 +355,7 @@ public class PostService {
         // Cập nhật ảnh nếu có
         if (hasImages) {
             try {
-                List<String> uploadedImageUrls = imageUploadKafkaService.uploadPostImages(images, userId, post.getId());
+                List<String> uploadedImageUrls = imageUploadService.uploadPostImages(images, userId, post.getId());
                 post.setImageUrls(uploadedImageUrls);
             } catch (Exception e) {
                 log.error("Failed to upload images for post: {}", post.getId(), e);
@@ -391,7 +391,8 @@ public class PostService {
             postRepository.deleteAllByOriginalPostId(postId);
         } else {
             // Nếu đây là shared post, xóa SharedPost record tương ứng
-            sharedPostRepository.findByUserIdAndPostId(userId, post.getOriginalPostId())
+            sharedPostRepository
+                    .findByUserIdAndPostId(userId, post.getOriginalPostId())
                     .ifPresent(sharedPostRepository::delete);
         }
 
@@ -432,7 +433,8 @@ public class PostService {
         UserProfileResponse userProfile = getUserProfile(userId);
 
         // Lấy các shared posts (posts có originalPostId) của user hiện tại
-        Pageable pageable = PageRequest.of(page - 1, size, Sort.by("createdDate").descending());
+        Pageable pageable =
+                PageRequest.of(page - 1, size, Sort.by("createdDate").descending());
         var pageData = postRepository.findByUserIdAndOriginalPostIdIsNotNull(userId, pageable);
 
         var postList = pageData.getContent().stream()
@@ -663,7 +665,8 @@ public class PostService {
         // Set original post owner info nếu là shared post
         if (post.getOriginalPostId() != null && !post.getOriginalPostId().trim().isEmpty()) {
             try {
-                Post originalPost = postRepository.findById(post.getOriginalPostId()).orElse(null);
+                Post originalPost =
+                        postRepository.findById(post.getOriginalPostId()).orElse(null);
                 if (originalPost != null) {
                     postResponse.setOriginalPostUserId(originalPost.getUserId());
                     UserProfileResponse originalPostUserProfile = getUserProfile(originalPost.getUserId());
@@ -723,7 +726,10 @@ public class PostService {
 
     private String getDisplayName(String firstName, String lastName, String username) {
         // Nếu có cả firstName và lastName, hiển thị "firstName lastName"
-        if (firstName != null && !firstName.trim().isEmpty() && lastName != null && !lastName.trim().isEmpty()) {
+        if (firstName != null
+                && !firstName.trim().isEmpty()
+                && lastName != null
+                && !lastName.trim().isEmpty()) {
             return (firstName.trim() + " " + lastName.trim()).trim();
         }
         // Nếu chỉ có lastName, hiển thị lastName (thường là username)

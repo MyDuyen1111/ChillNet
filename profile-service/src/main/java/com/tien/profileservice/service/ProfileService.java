@@ -2,9 +2,9 @@ package com.tien.profileservice.service;
 
 import java.util.List;
 
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.tien.profileservice.dto.request.ProfileCreationRequest;
 import com.tien.profileservice.dto.request.SearchUserRequest;
@@ -20,7 +20,6 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -32,7 +31,8 @@ public class ProfileService {
 
     ProfileMapper profileMapper;
 
-    ImageUploadKafkaService imageUploadKafkaService;
+    ImageUploadService imageUploadService;
+
     public ProfileResponse createProfile(ProfileCreationRequest request) {
         var existingProfile = profileRepository.findByUserId(request.getUserId());
         if (existingProfile.isPresent()) {
@@ -94,12 +94,12 @@ public class ProfileService {
         var profile =
                 profileRepository.findByUserId(userId).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-        // Upload file using Kafka
+        // Upload file qua file-service (Feign)
         try {
-            var uploadedEvent = imageUploadKafkaService.uploadAvatar(file, userId);
+            var uploadedEvent = imageUploadService.uploadAvatar(file, userId);
             profile.setAvatar(uploadedEvent.imageUrl());
         } catch (Exception e) {
-            log.error("Failed to upload avatar via Kafka: {}", e.getMessage(), e);
+            log.error("Failed to upload avatar via file-service: {}", e.getMessage(), e);
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION);
         }
 
@@ -117,12 +117,12 @@ public class ProfileService {
         var profile =
                 profileRepository.findByUserId(userId).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-        // Upload file using Kafka
+        // Upload file qua file-service (Feign)
         try {
-            var uploadedEvent = imageUploadKafkaService.uploadBackgroundImage(file, userId);
+            var uploadedEvent = imageUploadService.uploadBackgroundImage(file, userId);
             profile.setBackgroundImage(uploadedEvent.imageUrl());
         } catch (Exception e) {
-            log.error("Failed to upload background image via Kafka: {}", e.getMessage(), e);
+            log.error("Failed to upload background image via file-service: {}", e.getMessage(), e);
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION);
         }
 
@@ -132,14 +132,14 @@ public class ProfileService {
     public List<ProfileResponse> search(SearchUserRequest request) {
         var userId = SecurityContextHolder.getContext().getAuthentication().getName();
         String keyword = request.getKeyword() != null ? request.getKeyword().trim() : "";
-        
+
         if (keyword.isEmpty()) {
             return List.of();
         }
-        
+
         List<Profile> userProfiles = profileRepository.searchByKeyword(keyword);
         log.info("Searching for keyword: {}, found {} profiles", keyword, userProfiles.size());
-        
+
         return userProfiles.stream()
                 .filter(userProfile -> !userId.equals(userProfile.getUserId()))
                 .map(profileMapper::toProfileResponse)
@@ -151,8 +151,6 @@ public class ProfileService {
             return List.of();
         }
         List<Profile> profiles = profileRepository.findAllByUserIdIn(userIds);
-        return profiles.stream()
-                .map(profileMapper::toProfileResponse)
-                .toList();
+        return profiles.stream().map(profileMapper::toProfileResponse).toList();
     }
 }
