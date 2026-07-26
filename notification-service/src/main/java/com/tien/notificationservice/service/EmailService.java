@@ -36,17 +36,19 @@ public class EmailService {
             log.error("SendEmailRequest is null");
             throw new AppException(ErrorCode.CANNOT_SEND_EMAIL);
         }
-        
-        if (request.getTo() == null || request.getTo().getEmail() == null || request.getTo().getEmail().isEmpty()) {
+
+        if (request.getTo() == null
+                || request.getTo().getEmail() == null
+                || request.getTo().getEmail().isEmpty()) {
             log.error("Recipient email is null or empty");
             throw new AppException(ErrorCode.CANNOT_SEND_EMAIL);
         }
-        
+
         if (apiKey == null || apiKey.isEmpty()) {
             log.error("Brevo API key is not configured");
             throw new AppException(ErrorCode.CANNOT_SEND_EMAIL);
         }
-        
+
         EmailRequest emailRequest = EmailRequest.builder()
                 .sender(Sender.builder()
                         .name("ChillNet")
@@ -56,22 +58,26 @@ public class EmailService {
                 .subject(request.getSubject())
                 .htmlContent(request.getHtmlContent())
                 .build();
-        
+
         log.info("Sending email to: {}, subject: {}", request.getTo().getEmail(), request.getSubject());
-        
+
         try {
             EmailResponse response = emailClient.sendEmail(apiKey, emailRequest);
             log.info("Email sent successfully to: {}", request.getTo().getEmail());
             return response;
         } catch (FeignException e) {
-            log.error("Failed to send email to: {}. Status: {}, Message: {}, Response body: {}", 
-                    request.getTo().getEmail(), 
-                    e.status(), 
+            log.error(
+                    "Failed to send email to: {}. Status: {}, Message: {}, Response body: {}",
+                    request.getTo().getEmail(),
+                    e.status(),
                     e.getMessage(),
                     e.contentUTF8());
             throw new AppException(ErrorCode.CANNOT_SEND_EMAIL);
         } catch (Exception e) {
-            log.error("Unexpected error while sending email to: {}", request.getTo().getEmail(), e);
+            log.error(
+                    "Unexpected error while sending email to: {}",
+                    request.getTo().getEmail(),
+                    e);
             throw new AppException(ErrorCode.CANNOT_SEND_EMAIL);
         }
     }

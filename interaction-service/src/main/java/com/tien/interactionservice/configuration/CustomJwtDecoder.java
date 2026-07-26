@@ -1,13 +1,14 @@
 package com.tien.interactionservice.configuration;
 
-import com.nimbusds.jwt.SignedJWT;
+import java.text.ParseException;
+import java.time.Instant;
+
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.stereotype.Component;
 
-import java.text.ParseException;
-import java.time.Instant;
+import com.nimbusds.jwt.SignedJWT;
 
 @Component
 public class CustomJwtDecoder implements JwtDecoder {
@@ -17,9 +18,8 @@ public class CustomJwtDecoder implements JwtDecoder {
             SignedJWT signedJWT = SignedJWT.parse(token);
             var claimsSet = signedJWT.getJWTClaimsSet();
 
-            var issuedAt = claimsSet.getIssueTime() != null
-                    ? claimsSet.getIssueTime().toInstant()
-                    : Instant.now();
+            var issuedAt =
+                    claimsSet.getIssueTime() != null ? claimsSet.getIssueTime().toInstant() : Instant.now();
 
             var expirationTime = claimsSet.getExpirationTime();
             if (expirationTime == null) {
@@ -39,4 +39,3 @@ public class CustomJwtDecoder implements JwtDecoder {
         }
     }
 }
-

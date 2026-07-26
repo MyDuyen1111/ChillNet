@@ -13,6 +13,5 @@ import lombok.experimental.FieldDefaults;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class ProcessJoinRequest {
-	Boolean approve; // true = approve, false = reject
+    Boolean approve; // true = approve, false = reject
 }
-

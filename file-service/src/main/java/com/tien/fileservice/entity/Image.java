@@ -2,11 +2,12 @@ package com.tien.fileservice.entity;
 
 import java.time.Instant;
 
-import com.tien.sharedcontacts.media.entity.ImageType;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.MongoId;
+
+import com.tien.sharedcontacts.media.entity.ImageType;
 
 import lombok.*;
 import lombok.experimental.FieldDefaults;

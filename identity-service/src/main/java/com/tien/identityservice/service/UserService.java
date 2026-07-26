@@ -40,12 +40,9 @@ public class UserService {
 
     // Lấy thông tin user hiện đang đăng nhập
     public UserResponse getMyInfo() {
-        String userId = SecurityContextHolder.getContext()
-                .getAuthentication()
-                .getName();
+        String userId = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        User user = userRepository.findById(userId).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         return userMapper.toUserResponse(user);
     }
@@ -53,8 +50,7 @@ public class UserService {
     // Cập nhật thông tin user (chỉ ADMIN)
     @PreAuthorize("hasRole('ADMIN')")
     public UserResponse updateUser(String userId, UserUpdateRequest request) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        User user = userRepository.findById(userId).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         userMapper.updateUser(user, request);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
@@ -68,8 +64,7 @@ public class UserService {
     // Xóa user (chỉ ADMIN)
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteUser(String userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        User user = userRepository.findById(userId).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
         user.setIsActive(false);
         userRepository.save(user);
     }
@@ -78,9 +73,7 @@ public class UserService {
     @PreAuthorize("hasRole('ADMIN')")
     public List<UserResponse> getUsers() {
         log.debug("Lấy danh sách tất cả users");
-        return userRepository.findAll().stream()
-                .map(userMapper::toUserResponse)
-                .toList();
+        return userRepository.findAll().stream().map(userMapper::toUserResponse).toList();
     }
 
     // Lấy thông tin user theo ID (chỉ ADMIN)
@@ -92,12 +85,9 @@ public class UserService {
 
     // Đổi mật khẩu cho user hiện tại
     public void changePassword(ChangePasswordRequest request) {
-        String userId = SecurityContextHolder.getContext()
-                .getAuthentication()
-                .getName();
+        String userId = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        User user = userRepository.findById(userId).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         // Kiểm tra mật khẩu cũ có đúng không
         if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {

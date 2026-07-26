@@ -44,14 +44,10 @@ public class SecurityConfig {
         "/auth/forgot-password",
         "/auth/reset-password"
     };
-    
+
     // Swagger UI endpoints
     private final String[] SWAGGER_ENDPOINTS = {
-        "/swagger-ui/**",
-        "/swagger-ui.html",
-        "/v3/api-docs/**",
-        "/swagger-resources/**",
-        "/webjars/**"
+        "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**"
     };
 
     CustomJwtDecoder customJwtDecoder;

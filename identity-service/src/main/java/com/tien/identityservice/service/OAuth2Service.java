@@ -50,7 +50,7 @@ public class OAuth2Service {
         // Create new user from OAuth2 provider
         // Generate unique username first
         String username = generateUniqueUsername(email);
-        
+
         // Parse name from OAuth provider
         String[] nameParts = name != null && !name.isEmpty() ? name.split(" ", 2) : new String[] {"", ""};
         String firstName = nameParts.length > 0 && !nameParts[0].isEmpty() ? nameParts[0] : null;

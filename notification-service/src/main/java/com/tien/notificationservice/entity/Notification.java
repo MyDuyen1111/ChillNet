@@ -1,11 +1,12 @@
 package com.tien.notificationservice.entity;
 
-import lombok.*;
-import lombok.experimental.FieldDefaults;
+import java.time.Instant;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
-import java.time.Instant;
+import lombok.*;
+import lombok.experimental.FieldDefaults;
 
 @Document(collection = "notifications")
 @Getter
@@ -15,19 +16,18 @@ import java.time.Instant;
 @AllArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class Notification {
-	@Id
-	String id;
+    @Id
+    String id;
 
-	String userId; // User nhận notification
-	String type; // FRIEND_REQUEST, POST_LIKE, POST_COMMENT, MESSAGE, etc.
-	String title; // Tiêu đề notification
-	String content; // Nội dung notification
-	String relatedUserId; // User liên quan (người like, comment, etc.)
-	String relatedEntityId; // ID của entity liên quan (postId, commentId, etc.)
-	String relatedEntityType; // POST, COMMENT, MESSAGE, etc.
+    String userId; // User nhận notification
+    String type; // FRIEND_REQUEST, POST_LIKE, POST_COMMENT, MESSAGE, etc.
+    String title; // Tiêu đề notification
+    String content; // Nội dung notification
+    String relatedUserId; // User liên quan (người like, comment, etc.)
+    String relatedEntityId; // ID của entity liên quan (postId, commentId, etc.)
+    String relatedEntityType; // POST, COMMENT, MESSAGE, etc.
 
-	Boolean isRead; // Đã đọc chưa
-	Instant createdAt; // Thời gian tạo
-	Instant readAt; // Thời gian đọc
+    Boolean isRead; // Đã đọc chưa
+    Instant createdAt; // Thời gian tạo
+    Instant readAt; // Thời gian đọc
 }
-

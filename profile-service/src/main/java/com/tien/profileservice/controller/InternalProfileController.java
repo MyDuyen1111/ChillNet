@@ -1,5 +1,7 @@
 package com.tien.profileservice.controller;
 
+import java.util.List;
+
 import org.springframework.web.bind.annotation.*;
 
 import com.tien.profileservice.dto.ApiResponse;
@@ -10,8 +12,6 @@ import com.tien.profileservice.service.ProfileService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-
-import java.util.List;
 
 @RestController
 @RequiredArgsConstructor

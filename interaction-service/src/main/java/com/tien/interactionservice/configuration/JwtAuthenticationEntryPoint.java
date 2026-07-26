@@ -1,16 +1,18 @@
 package com.tien.interactionservice.configuration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tien.interactionservice.dto.ApiResponse;
-import com.tien.interactionservice.exception.ErrorCode;
+import java.io.IOException;
+
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import org.springframework.http.MediaType;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 
-import java.io.IOException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tien.interactionservice.dto.ApiResponse;
+import com.tien.interactionservice.exception.ErrorCode;
 
 public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
     ObjectMapper objectMapper;
@@ -37,4 +39,3 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.flushBuffer();
     }
 }
-

@@ -1,6 +1,7 @@
 package com.tien.interactionservice.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
+
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -19,4 +20,3 @@ public class UpdateCommentRequest {
     @NotBlank(message = "Nội dung comment không được để trống")
     String content;
 }
-

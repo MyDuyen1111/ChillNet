@@ -4,7 +4,6 @@ import java.text.ParseException;
 import java.util.Date;
 import java.util.HashSet;
 
-import com.tien.identityservice.constant.SignInProvider;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -16,6 +15,7 @@ import com.nimbusds.jwt.SignedJWT;
 import com.tien.identityservice.constant.EmailTemplate;
 import com.tien.identityservice.constant.OtpType;
 import com.tien.identityservice.constant.PredefinedRole;
+import com.tien.identityservice.constant.SignInProvider;
 import com.tien.identityservice.dto.request.*;
 import com.tien.identityservice.dto.response.AuthenticationResponse;
 import com.tien.identityservice.dto.response.IntrospectResponse;
@@ -135,9 +135,7 @@ public class AuthenticationService {
     public IntrospectResponse introspect(IntrospectRequest request) throws JOSEException, ParseException {
         String token = request.getToken();
         boolean isValid = jwtService.isValidToken(token);
-        return IntrospectResponse.builder()
-                .valid(isValid)
-                .build();
+        return IntrospectResponse.builder().valid(isValid).build();
     }
 
     // Xác thực username/password, trả về JWT token.
@@ -158,10 +156,7 @@ public class AuthenticationService {
 
         String token = jwtService.generateToken(user);
 
-        return AuthenticationResponse.builder()
-                .token(token)
-                .authenticated(true)
-                .build();
+        return AuthenticationResponse.builder().token(token).authenticated(true).build();
     }
 
     // Revoke token (đánh dấu token không còn hợp lệ)
@@ -198,16 +193,14 @@ public class AuthenticationService {
 
         String token = jwtService.generateToken(user);
 
-        return AuthenticationResponse.builder()
-                .token(token)
-                .authenticated(true)
-                .build();
+        return AuthenticationResponse.builder().token(token).authenticated(true).build();
     }
 
     // Gửi OTP để reset password (forgot password)
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository
+                .findByEmail(request.getEmail())
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         // Kiểm tra user đã verify email chưa
@@ -234,7 +227,8 @@ public class AuthenticationService {
     // Reset password với OTP
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository
+                .findByEmail(request.getEmail())
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         // Kiểm tra user đã verify email chưa
