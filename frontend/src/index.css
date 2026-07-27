@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/* Self-hosted variable fonts (no external <link>, good for CWV). */
+@import "@fontsource-variable/plus-jakarta-sans";
+@import "@fontsource-variable/jetbrains-mono";
+
+/* Class-based dark mode: the <html> element carries `.dark`. The inline script
+   in index.html sets it before first paint; ThemeToggle flips it at runtime. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+	--font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+	/* Single locked accent for the whole product: teal. Neutrals come from the
+	   built-in zinc scale. Do not introduce a second accent anywhere. */
+	--color-brand-50: #f0fdfa;
+	--color-brand-100: #ccfbf1;
+	--color-brand-200: #99f6e4;
+	--color-brand-300: #5eead4;
+	--color-brand-400: #2dd4bf;
+	--color-brand-500: #14b8a6;
+	--color-brand-600: #0d9488;
+	--color-brand-700: #0f766e;
+	--color-brand-800: #115e59;
+	--color-brand-900: #134e4a;
+
+	--radius-card: 1rem;
+}
+
+:root {
+	color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+}
+
+body {
+	@apply bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+	font-family: var(--font-sans);
+}
+
+/* Consistent focus ring across the app. */
+*:focus-visible {
+	@apply outline-none ring-2 ring-brand-500/60 ring-offset-2 ring-offset-zinc-50 dark:ring-offset-zinc-950;
+}
+
+/* Thin, unobtrusive scrollbars. */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: rgb(161 161 170 / 0.4) transparent;
+}
+*::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+	@apply rounded-full bg-zinc-400/40;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
