@@ -18,6 +18,7 @@ public enum ErrorCode {
     ALREADY_LIKED(2004, "Đã thích rồi", HttpStatus.BAD_REQUEST),
     INVALID_LIKE_REQUEST(2005, "Yêu cầu thích không hợp lệ", HttpStatus.BAD_REQUEST),
     USER_NOT_FOUND(2006, "Không tìm thấy người dùng", HttpStatus.NOT_FOUND),
+    CONTENT_VIOLATION(2007, "Bình luận vi phạm tiêu chuẩn cộng đồng, vui lòng chỉnh sửa.", HttpStatus.BAD_REQUEST),
     ;
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {
