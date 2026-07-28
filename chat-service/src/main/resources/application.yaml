@@ -1,5 +1,23 @@
+server:
+  port: 8086
+  servlet:
+    context-path: /chat
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
 spring:
   application:
     name: chat-service
-  config:
-    import: "optional:configserver:http://localhost:8888"
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://root:814362@localhost:27017/chat-service?authSource=admin}
+      auto-index-creation: true
+app:
+  services:
+    profile:
+      url: http://localhost:8082/profile

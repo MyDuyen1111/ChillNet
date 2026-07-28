@@ -1,5 +1,63 @@
+server:
+  port: 8081
+  servlet:
+    context-path: /identity
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
 spring:
   application:
     name: identity-service
-  config:
-    import: "optional:configserver:http://localhost:8888"
+  datasource:
+    url: ${DBMS_CONNECTION:jdbc:mysql://localhost:3306/identity_service?createDatabaseIfNotExist=true}
+    username: ${DBMS_USERNAME:root}
+    password: ${DBMS_PASSWORD:814362}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate.dialect: org.hibernate.dialect.MySQLDialect
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            # Default dummy để service khởi động được khi chưa cấu hình Google OAuth;
+            # đăng nhập Google chỉ hoạt động khi set CLIENT_ID/CLIENT_SECRET/GOOGLE_REDIRECT_URI thật.
+            client-id: ${CLIENT_ID:dummy-client-id}
+            client-secret: ${CLIENT_SECRET:dummy-client-secret}
+            scope: profile, email
+            redirect-uri: "${GOOGLE_REDIRECT_URI:http://localhost:8081/identity/login/oauth2/code}/{registrationId}"
+            client-name: Google
+        provider:
+          google:
+            authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
+            token-uri: https://oauth2.googleapis.com/token
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+            user-name-attribute: sub
+jwt:
+  signerKey: ${JWT_SIGNER_KEY}
+  issuer: "chillnet.com"     # Issuer c?a JWT
+  valid-duration: 3600 # in second
+  refreshable-duration: 36000 # in seconds
+app:
+  services:
+    profile: http://localhost:8082/profile
+    notification:
+      url: http://localhost:8083/notification
+  oauth2:
+    authorizedRedirectUri: "http://localhost:5173/oauth2/redirect"
+  seed:
+    admin:
+      username: "admin"
+      password: "admin"
+      email: "chillnetadmin@yopmail.com"
