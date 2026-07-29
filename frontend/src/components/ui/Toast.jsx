@@ -1,17 +1,15 @@
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { CheckCircle, Info, WarningCircle, X } from "@phosphor-icons/react";
 import { cn } from "../../lib/cn";
 
 const ToastContext = createContext(null);
 
-const icons = {
-	success: { Icon: CheckCircle, tint: "text-brand-500" },
-	error: { Icon: WarningCircle, tint: "text-rose-500" },
-	info: { Icon: Info, tint: "text-sky-500" },
-};
-
+/**
+ * Instagram's toast is a single dark pill that rises from the bottom centre,
+ * text only, no icon and no colour coding. Errors get a red hairline so they
+ * still read as failures without breaking the monochrome chrome.
+ */
 export function ToastProvider({ children }) {
 	const [toasts, setToasts] = useState([]);
 	const seq = useRef(0);
@@ -38,37 +36,25 @@ export function ToastProvider({ children }) {
 		<ToastContext.Provider value={toast}>
 			{children}
 			{createPortal(
-				<div className="fixed bottom-4 right-4 z-[60] flex flex-col gap-2">
+				<div className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 sm:bottom-8">
 					<AnimatePresence>
-						{toasts.map(({ id, message, type }) => {
-							const { Icon, tint } = icons[type] || icons.info;
-							return (
-								<motion.div
-									key={id}
-									layout
-									initial={{ opacity: 0, x: 40, scale: 0.9 }}
-									animate={{ opacity: 1, x: 0, scale: 1 }}
-									exit={{ opacity: 0, x: 40, scale: 0.9 }}
-									transition={{ type: "spring", stiffness: 320, damping: 28 }}
-									className={cn(
-										"flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-lg",
-										"dark:border-zinc-800 dark:bg-zinc-900",
-									)}
-								>
-									<Icon size={20} className={tint} weight="fill" />
-									<span className="max-w-xs text-sm text-zinc-800 dark:text-zinc-100">
-										{message}
-									</span>
-									<button
-										onClick={() => dismiss(id)}
-										className="text-zinc-400 hover:text-zinc-600"
-										aria-label="Đóng"
-									>
-										<X size={14} />
-									</button>
-								</motion.div>
-							);
-						})}
+						{toasts.map(({ id, message, type }) => (
+							<motion.button
+								key={id}
+								layout
+								onClick={() => dismiss(id)}
+								initial={{ opacity: 0, y: 16 }}
+								animate={{ opacity: 1, y: 0 }}
+								exit={{ opacity: 0, y: 8 }}
+								transition={{ duration: 0.18, ease: "easeOut" }}
+								className={cn(
+									"pointer-events-auto max-w-sm rounded-lg bg-[#262626] px-4 py-3 text-sm text-white shadow-lg",
+									type === "error" && "border border-like",
+								)}
+							>
+								{message}
+							</motion.button>
+						))}
 					</AnimatePresence>
 				</div>,
 				document.body,

@@ -1,59 +1,37 @@
-import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-	Bell,
-	ChatCircleDots,
+	Gear,
+	Heart,
 	House,
+	List,
+	MagnifyingGlass,
+	Moon,
+	PaperPlaneTilt,
+	PlusSquare,
 	SignOut,
+	Sun,
 	UsersThree,
-	UserCircle,
-	Users,
 } from "@phosphor-icons/react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useAuth } from "../../lib/auth";
 import api from "../../lib/api";
 import endpoints from "../../lib/endpoints";
 import { displayName } from "../../lib/format";
 import { cn } from "../../lib/cn";
-import { Avatar, ThemeToggle } from "../ui";
+import { Avatar } from "../ui";
 
+// Instagram's rail order. `badge` marks the item that carries the unread pill.
 const NAV = [
-	{ to: "/feed", label: "Bảng tin", icon: House },
-	{ to: "/friends", label: "Bạn bè", icon: Users },
-	{ to: "/messages", label: "Tin nhắn", icon: ChatCircleDots },
+	{ to: "/feed", label: "Trang chủ", icon: House },
+	{ to: "/friends", label: "Tìm kiếm", icon: MagnifyingGlass },
 	{ to: "/groups", label: "Nhóm", icon: UsersThree },
-	{ to: "/notifications", label: "Thông báo", icon: Bell },
+	{ to: "/messages", label: "Tin nhắn", icon: PaperPlaneTilt },
+	{ to: "/notifications", label: "Thông báo", icon: Heart, badge: true },
 ];
 
-function NavItem({ to, label, icon: Icon, onClick }) {
-	return (
-		<NavLink
-			to={to}
-			onClick={onClick}
-			className={({ isActive }) =>
-				cn(
-					"group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-					isActive
-						? "bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300"
-						: "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100",
-				)
-			}
-		>
-			{({ isActive }) => (
-				<>
-					<Icon size={22} weight={isActive ? "fill" : "regular"} />
-					<span>{label}</span>
-					{isActive && (
-						<motion.span
-							layoutId="nav-active"
-							className="absolute inset-y-1.5 left-0 w-1 rounded-full bg-brand-500"
-						/>
-					)}
-				</>
-			)}
-		</NavLink>
-	);
-}
+// The phone tab bar shows five destinations; notifications live in the top bar.
+const MOBILE_NAV = ["/feed", "/friends", "/groups", "/messages"];
 
 function useUnreadCount() {
 	const [count, setCount] = useState(0);
@@ -74,113 +52,279 @@ function useUnreadCount() {
 	return count;
 }
 
+function useDarkMode() {
+	const [dark, setDark] = useState(() =>
+		document.documentElement.classList.contains("dark"),
+	);
+	useEffect(() => {
+		document.documentElement.classList.toggle("dark", dark);
+		localStorage.setItem("chillnet-theme", dark ? "dark" : "light");
+	}, [dark]);
+	return [dark, () => setDark((d) => !d)];
+}
+
+function Badge({ count }) {
+	if (!count) return null;
+	return (
+		<span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-like px-1 text-[11px] font-semibold leading-none text-white">
+			{count > 9 ? "9+" : count}
+		</span>
+	);
+}
+
+// Below xl the rail is a 73px icon strip; at xl it opens up and the labels
+// appear. On the inbox it stays an icon strip at every width.
+const railShell = (compact) =>
+	cn(
+		"flex h-12 w-12 items-center justify-center gap-4 rounded-full text-base text-ink transition-colors hover:bg-hover",
+		!compact && "xl:h-auto xl:w-auto xl:justify-start xl:p-3",
+	);
+const railLabel = (compact) => (compact ? "hidden" : "hidden truncate xl:block");
+
+/**
+ * One rail row. Instagram animates the glyph with a small press-scale, turns it
+ * solid when active, and bolds the label.
+ */
+function RailItem({ to, label, icon: Icon, compact, badge, onClick, as = "link" }) {
+	const reduce = useReducedMotion();
+	const body = (isActive) => (
+		<>
+			<span className="relative">
+				<motion.span
+					whileTap={reduce ? undefined : { scale: 0.9 }}
+					className="block"
+				>
+					<Icon size={24} weight={isActive ? "fill" : "regular"} />
+				</motion.span>
+				{badge}
+			</span>
+			<span className={cn(railLabel(compact), isActive && "font-bold")}>{label}</span>
+		</>
+	);
+
+	const shell = railShell(compact);
+
+	if (as === "button") {
+		return (
+			<button type="button" onClick={onClick} title={label} className={shell}>
+				{body(false)}
+			</button>
+		);
+	}
+
+	return (
+		<NavLink to={to} title={label} className={shell}>
+			{({ isActive }) => body(isActive)}
+		</NavLink>
+	);
+}
+
+/** The "Thêm" popover: settings, theme, sign out. */
+function MoreMenu({ compact, onLogout }) {
+	const [open, setOpen] = useState(false);
+	const [dark, toggleDark] = useDarkMode();
+	const ref = useRef(null);
+	const reduce = useReducedMotion();
+
+	useEffect(() => {
+		if (!open) return;
+		const onDown = (e) => !ref.current?.contains(e.target) && setOpen(false);
+		const onKey = (e) => e.key === "Escape" && setOpen(false);
+		document.addEventListener("mousedown", onDown);
+		document.addEventListener("keydown", onKey);
+		return () => {
+			document.removeEventListener("mousedown", onDown);
+			document.removeEventListener("keydown", onKey);
+		};
+	}, [open]);
+
+	const row =
+		"flex w-full items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm text-ink transition-colors hover:bg-hover";
+
+	return (
+		<div ref={ref} className="relative">
+			<AnimatePresence>
+				{open && (
+					<motion.div
+						initial={reduce ? false : { opacity: 0, y: 8, scale: 0.98 }}
+						animate={{ opacity: 1, y: 0, scale: 1 }}
+						exit={{ opacity: 0, y: 4, scale: 0.98 }}
+						transition={{ duration: 0.15, ease: "easeOut" }}
+						className="absolute bottom-full left-0 mb-2 w-[266px] overflow-hidden rounded-xl bg-surface p-2 shadow-[0_4px_12px_rgba(0,0,0,0.15)] ring-1 ring-line"
+					>
+						<Link to="/profile" onClick={() => setOpen(false)} className={row}>
+							Cài đặt <Gear size={18} />
+						</Link>
+						<button type="button" onClick={toggleDark} className={row}>
+							Chuyển chế độ {dark ? <Sun size={18} /> : <Moon size={18} />}
+						</button>
+						<div className="my-1 h-px bg-line" />
+						<button type="button" onClick={onLogout} className={row}>
+							Đăng xuất <SignOut size={18} />
+						</button>
+					</motion.div>
+				)}
+			</AnimatePresence>
+			<RailItem
+				as="button"
+				label="Thêm"
+				icon={List}
+				compact={compact}
+				onClick={() => setOpen((o) => !o)}
+			/>
+		</div>
+	);
+}
+
 export default function AppShell() {
 	const { user, logout } = useAuth();
 	const navigate = useNavigate();
+	const location = useLocation();
 	const unread = useUnreadCount();
 	const name = displayName(user?.profile);
 	const avatar = user?.profile?.avatar;
+
+	// Instagram narrows the rail to icons whenever the page owns the full width
+	// (the inbox), so the conversation list gets its space back.
+	const compact = location.pathname.startsWith("/messages");
 
 	const onLogout = () => {
 		logout();
 		navigate("/login", { replace: true });
 	};
+	const onCreate = () => navigate("/feed?create=1");
+
+	const railWidth = compact ? "w-[73px]" : "w-[73px] xl:w-[245px]";
+	const mainOffset = compact ? "md:pl-[73px]" : "md:pl-[73px] xl:pl-[245px]";
 
 	return (
-		<div className="mx-auto flex min-h-[100dvh] w-full max-w-[1400px]">
-			{/* Desktop left rail */}
-			<aside className="sticky top-0 hidden h-[100dvh] w-64 shrink-0 flex-col border-r border-zinc-200 px-4 py-6 dark:border-zinc-800 lg:flex">
-				<Link to="/feed" className="mb-8 flex items-center gap-2 px-2">
-					<span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 font-bold text-white">
+		<div className="min-h-[100dvh] bg-canvas text-ink">
+			{/* Desktop / tablet rail */}
+			<aside
+				className={cn(
+					"fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-line bg-surface px-3 pb-5 pt-2 md:flex",
+					railWidth,
+				)}
+			>
+				<Link
+					to="/feed"
+					className="mb-5 flex h-[73px] items-center px-3"
+					aria-label="ChillNet"
+				>
+					<span
+						className={cn(
+							"text-2xl leading-none tracking-tight",
+							compact ? "hidden" : "hidden xl:block",
+						)}
+						style={{ fontFamily: "var(--font-script)" }}
+					>
+						ChillNet
+					</span>
+					{/* Collapsed mark. Deliberately NOT the script face: Grand Hotel's
+					    capital C reads as a lowercase "e" on its own, so the compact
+					    rail uses a plain sans letter, the way Instagram swaps its
+					    wordmark for the camera glyph. */}
+					<span
+						className={cn(
+							"h-[26px] w-[26px] text-center text-2xl font-bold leading-[26px]",
+							compact ? "block" : "block xl:hidden",
+						)}
+					>
 						C
 					</span>
-					<span className="text-lg font-bold tracking-tight">ChillNet</span>
 				</Link>
-				<nav className="flex flex-1 flex-col gap-1">
-					{NAV.map((item) => (
-						<NavItem key={item.to} {...item} />
+
+				<nav className="flex flex-1 flex-col gap-1.5">
+					{NAV.map(({ to, label, icon, badge }) => (
+						<RailItem
+							key={to}
+							to={to}
+							label={label}
+							icon={icon}
+							compact={compact}
+							badge={badge ? <Badge count={unread} /> : null}
+						/>
 					))}
-					<NavItem to="/profile" label="Trang cá nhân" icon={UserCircle} />
-				</nav>
-				<div className="mt-4 flex items-center gap-3 rounded-xl border border-zinc-200 p-2.5 dark:border-zinc-800">
-					<Link to="/profile">
-						<Avatar src={avatar} name={name} size="md" />
-					</Link>
-					<div className="min-w-0 flex-1">
-						<p className="truncate text-sm font-semibold">{name}</p>
-						<p className="truncate text-xs text-zinc-500">
-							@{user?.profile?.username ?? "..."}
-						</p>
-					</div>
-					<button
-						onClick={onLogout}
-						aria-label="Đăng xuất"
-						className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-rose-500 dark:hover:bg-zinc-800"
-					>
-						<SignOut size={18} />
-					</button>
-				</div>
-			</aside>
-
-			{/* Main column */}
-			<div className="flex min-w-0 flex-1 flex-col">
-				<header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-zinc-200 bg-zinc-50/80 px-4 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/80 lg:px-8">
-					<Link to="/feed" className="flex items-center gap-2 lg:hidden">
-						<span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 font-bold text-white">
-							C
-						</span>
-						<span className="font-bold">ChillNet</span>
-					</Link>
-					<div className="hidden lg:block" />
-					<div className="flex items-center gap-1">
-						<Link
-							to="/notifications"
-							className="relative rounded-full p-2.5 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-							aria-label="Thông báo"
-						>
-							<Bell size={20} />
-							{unread > 0 && (
-								<span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-									{unread > 9 ? "9+" : unread}
-								</span>
-							)}
-						</Link>
-						<ThemeToggle />
-						<Link to="/profile" className="ml-1 lg:hidden">
-							<Avatar src={avatar} name={name} size="sm" />
-						</Link>
-					</div>
-				</header>
-
-				<main className="flex-1 px-4 pb-24 pt-6 lg:px-8 lg:pb-10">
-					<Outlet />
-				</main>
-			</div>
-
-			{/* Mobile bottom tab bar */}
-			<nav className="fixed bottom-0 left-0 right-0 z-30 flex items-center justify-around border-t border-zinc-200 bg-white/90 px-2 py-2 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90 lg:hidden">
-				{NAV.map(({ to, label, icon: Icon }) => (
-					<NavLink
-						key={to}
-						to={to}
-						aria-label={label}
-						className={({ isActive }) =>
-							cn(
-								"flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium",
-								isActive
-									? "text-brand-600 dark:text-brand-400"
-									: "text-zinc-500 dark:text-zinc-400",
-							)
-						}
-					>
+					<RailItem
+						as="button"
+						label="Tạo"
+						icon={PlusSquare}
+						compact={compact}
+						onClick={onCreate}
+					/>
+					<NavLink to="/profile" title="Trang cá nhân" className={railShell(compact)}>
 						{({ isActive }) => (
 							<>
-								<Icon size={22} weight={isActive ? "fill" : "regular"} />
-								{label}
+								<span
+									className={cn(
+										"rounded-full",
+										isActive &&
+											"ring-2 ring-ink ring-offset-2 ring-offset-surface",
+									)}
+								>
+									<Avatar src={avatar} name={name} size="xs" />
+								</span>
+								<span
+									className={cn(
+										railLabel(compact),
+										isActive && "font-bold",
+									)}
+								>
+									Trang cá nhân
+								</span>
 							</>
 						)}
 					</NavLink>
-				))}
+				</nav>
+
+				<MoreMenu compact={compact} onLogout={onLogout} />
+			</aside>
+
+			{/* Phone top bar */}
+			<header className="sticky top-0 z-30 flex h-[60px] items-center justify-between border-b border-line bg-surface px-4 md:hidden">
+				<Link to="/feed" className="text-2xl" style={{ fontFamily: "var(--font-script)" }}>
+					ChillNet
+				</Link>
+				<div className="flex items-center gap-5">
+					<Link to="/notifications" aria-label="Thông báo" className="relative">
+						<Heart size={24} />
+						<Badge count={unread} />
+					</Link>
+					<button type="button" onClick={onCreate} aria-label="Tạo bài viết">
+						<PlusSquare size={24} />
+					</button>
+				</div>
+			</header>
+
+			<main className={cn("pb-[50px] md:pb-0", mainOffset)}>
+				<Outlet />
+			</main>
+
+			{/* Phone tab bar */}
+			<nav className="fixed bottom-0 left-0 right-0 z-30 flex h-[50px] items-center justify-around border-t border-line bg-surface md:hidden">
+				{MOBILE_NAV.map((to) => {
+					const item = NAV.find((n) => n.to === to);
+					const Icon = item.icon;
+					return (
+						<NavLink key={to} to={to} aria-label={item.label} className="p-2">
+							{({ isActive }) => (
+								<Icon size={24} weight={isActive ? "fill" : "regular"} />
+							)}
+						</NavLink>
+					);
+				})}
+				<NavLink to="/profile" aria-label="Trang cá nhân" className="p-2">
+					{({ isActive }) => (
+						<span
+							className={cn(
+								"block rounded-full",
+								isActive && "ring-2 ring-ink ring-offset-1 ring-offset-surface",
+							)}
+						>
+							<Avatar src={avatar} name={name} size="xs" />
+						</span>
+					)}
+				</NavLink>
 			</nav>
 		</div>
 	);

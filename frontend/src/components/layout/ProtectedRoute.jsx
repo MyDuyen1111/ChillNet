@@ -11,7 +11,7 @@ export default function ProtectedRoute({ children }) {
 	if (booting) {
 		return (
 			<div className="flex min-h-[100dvh] items-center justify-center">
-				<Spinner size={28} className="text-brand-500" />
+				<Spinner size={28} className="text-muted" />
 			</div>
 		);
 	}

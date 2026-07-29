@@ -1,38 +1,40 @@
+import { User } from "@phosphor-icons/react";
 import { cn } from "../../lib/cn";
 
 const sizes = {
 	xs: "h-6 w-6 text-[10px]",
-	sm: "h-8 w-8 text-xs",
-	md: "h-10 w-10 text-sm",
-	lg: "h-14 w-14 text-lg",
-	xl: "h-24 w-24 text-3xl",
+	sm: "h-8 w-8 text-xs", // post header / comment
+	md: "h-11 w-11 text-sm", // suggestion rows, list items
+	lg: "h-14 w-14 text-base", // stories, conversation list
+	xl: "h-[88px] w-[88px] text-2xl",
+	"2xl": "h-[150px] w-[150px] text-4xl", // profile header
 };
 
+// Sizes for the silhouette shown when there is neither a photo nor a name.
+const glyphSizes = { xs: 14, sm: 18, md: 24, lg: 30, xl: 48, "2xl": 80 };
+
 function initials(name) {
-	if (!name) return "?";
-	const parts = name.trim().split(/\s+/);
+	const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+	if (!parts.length) return null;
 	return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
-// Deterministic tint from the name so avatars without a photo stay stable and
-// distinct (still within the neutral+brand family).
-const tints = [
-	"bg-brand-100 text-brand-700 dark:bg-brand-900/50 dark:text-brand-200",
-	"bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200",
-	"bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200",
-	"bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200",
-	"bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-200",
-];
-
+/**
+ * Circular avatar. `ring="story"` wraps it in Instagram's gradient story ring
+ * with a canvas-coloured gap; `ring="seen"` is the flat grey "already viewed"
+ * state. Photoless users fall back to monochrome initials, not a colour tint,
+ * because Instagram keeps every chrome surface neutral. With no name either,
+ * we show Instagram's grey silhouette rather than a "?", which reads as an
+ * error instead of as "no photo yet".
+ */
 export default function Avatar({ src, name, size = "md", className, ring = false }) {
-	const tint = tints[(name?.length ?? 0) % tints.length];
-	return (
+	const label = initials(name);
+	const img = (
 		<span
 			className={cn(
-				"inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold",
+				"inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full",
+				"bg-fill font-semibold text-muted",
 				sizes[size],
-				!src && tint,
-				ring && "ring-2 ring-white dark:ring-zinc-900",
 				className,
 			)}
 		>
@@ -43,9 +45,24 @@ export default function Avatar({ src, name, size = "md", className, ring = false
 					className="h-full w-full object-cover"
 					loading="lazy"
 				/>
+			) : label ? (
+				label
 			) : (
-				initials(name)
+				<User size={glyphSizes[size]} weight="fill" className="text-faint" />
 			)}
+		</span>
+	);
+
+	if (!ring) return img;
+
+	return (
+		<span
+			className={cn(
+				"inline-flex shrink-0 rounded-full p-[2px]",
+				ring === "seen" ? "bg-fill-strong" : "story-ring",
+			)}
+		>
+			<span className="inline-flex rounded-full bg-canvas p-[2px]">{img}</span>
 		</span>
 	);
 }

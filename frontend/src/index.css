@@ -1,35 +1,84 @@
 @import "tailwindcss";
 
-/* Self-hosted variable fonts (no external <link>, good for CWV). */
-@import "@fontsource-variable/plus-jakarta-sans";
-@import "@fontsource-variable/jetbrains-mono";
+/* Wordmark only. Self-hosted so the logo never falls back to a system serif,
+   which is what happens on Linux where no script face is installed. */
+@import "@fontsource/grand-hotel";
 
 /* Class-based dark mode: the <html> element carries `.dark`. The inline script
    in index.html sets it before first paint; ThemeToggle flips it at runtime. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-	--font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
-	--font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+	/* Instagram runs on the platform UI stack, not a webfont. Keeping it means
+	   zero font requests and the exact same texture as the reference. */
+	--font-sans:
+		-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+		sans-serif;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+	/* Wordmark only (the "ChillNet" logo in the rail and on the auth screens). */
+	--font-script: "Grand Hotel", "Segoe Script", "Brush Script MT", cursive;
 
-	/* Single locked accent for the whole product: teal. Neutrals come from the
-	   built-in zinc scale. Do not introduce a second accent anywhere. */
-	--color-brand-50: #f0fdfa;
-	--color-brand-100: #ccfbf1;
-	--color-brand-200: #99f6e4;
-	--color-brand-300: #5eead4;
-	--color-brand-400: #2dd4bf;
-	--color-brand-500: #14b8a6;
-	--color-brand-600: #0d9488;
-	--color-brand-700: #0f766e;
-	--color-brand-800: #115e59;
-	--color-brand-900: #134e4a;
+	/* Accent is the same blue in both themes, exactly like Instagram. */
+	--color-accent: #0095f6;
+	--color-accent-hover: #1877f2;
+	--color-accent-strong: #00376b;
+	--color-like: #ed4956;
 
-	--radius-card: 1rem;
+	/* Theme-aware surfaces. The values are runtime vars so a single `.dark`
+	   toggle re-colours every utility below without `dark:` duplication. */
+	--color-canvas: var(--ig-canvas);
+	--color-surface: var(--ig-surface);
+	--color-line: var(--ig-line);
+	--color-line-soft: var(--ig-line-soft);
+	--color-ink: var(--ig-ink);
+	--color-muted: var(--ig-muted);
+	--color-faint: var(--ig-faint);
+	--color-hover: var(--ig-hover);
+	--color-fill: var(--ig-fill);
+	--color-fill-strong: var(--ig-fill-strong);
+
+	/* Legacy alias: anything still written against the old teal `brand-*` scale
+	   resolves to the Instagram blue instead of rendering off-palette. */
+	--color-brand-50: #e8f4fe;
+	--color-brand-100: #cfe9fd;
+	--color-brand-200: #a0d3fb;
+	--color-brand-300: #6ab8f9;
+	--color-brand-400: #33a2f7;
+	--color-brand-500: #0095f6;
+	--color-brand-600: #0086dd;
+	--color-brand-700: #1877f2;
+	--color-brand-800: #005c9e;
+	--color-brand-900: #00376b;
 }
 
 :root {
-	color-scheme: light dark;
+	color-scheme: light;
+
+	--ig-canvas: #fafafa;
+	--ig-surface: #ffffff;
+	--ig-line: #dbdbdb;
+	--ig-line-soft: #efefef;
+	--ig-ink: #000000;
+	--ig-muted: #737373;
+	--ig-faint: #c7c7c7;
+	--ig-hover: #f2f2f2;
+	--ig-fill: #efefef;
+	--ig-fill-strong: #dbdbdb;
+}
+
+.dark {
+	color-scheme: dark;
+
+	--ig-canvas: #000000;
+	--ig-surface: #000000;
+	--ig-line: #262626;
+	--ig-line-soft: #1f1f1f;
+	--ig-ink: #f5f5f5;
+	--ig-muted: #a8a8a8;
+	--ig-faint: #737373;
+	--ig-hover: #1a1a1a;
+	--ig-fill: #262626;
+	--ig-fill-strong: #363636;
 }
 
 html,
@@ -39,26 +88,55 @@ body,
 }
 
 body {
-	@apply bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+	background-color: var(--ig-canvas);
+	color: var(--ig-ink);
 	font-family: var(--font-sans);
+	-webkit-font-smoothing: antialiased;
 }
 
-/* Consistent focus ring across the app. */
+/* Chrome paints autofilled inputs pale yellow and ignores background-color. The
+   only way to override it is an inset shadow the size of the field, plus a long
+   transition so the yellow never flashes in. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+	-webkit-text-fill-color: var(--ig-ink);
+	-webkit-box-shadow: 0 0 0 1000px var(--ig-canvas) inset;
+	caret-color: var(--ig-ink);
+	transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Instagram never draws a visible ring on mouse clicks, only on keyboard nav. */
 *:focus-visible {
-	@apply outline-none ring-2 ring-brand-500/60 ring-offset-2 ring-offset-zinc-50 dark:ring-offset-zinc-950;
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
+/* The story ring: Instagram's signature warm gradient. Put it on a wrapper and
+   the avatar inside gets the canvas-coloured gap for free. */
+.story-ring {
+	background: linear-gradient(
+		45deg,
+		#f09433 0%,
+		#e6683c 25%,
+		#dc2743 50%,
+		#cc2366 75%,
+		#bc1888 100%
+	);
 }
 
 /* Thin, unobtrusive scrollbars. */
 * {
 	scrollbar-width: thin;
-	scrollbar-color: rgb(161 161 170 / 0.4) transparent;
+	scrollbar-color: var(--ig-fill-strong) transparent;
 }
 *::-webkit-scrollbar {
 	width: 8px;
 	height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-	@apply rounded-full bg-zinc-400/40;
+	border-radius: 9999px;
+	background-color: var(--ig-fill-strong);
 }
 
 @media (prefers-reduced-motion: reduce) {

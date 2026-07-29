@@ -5,11 +5,13 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<meta
 			name="description"
-			content="ChillNet — kết nối, chia sẻ và trò chuyện."
+			content="ChillNet, kết nối, chia sẻ và trò chuyện."
 		/>
 		<title>ChillNet</title>
 		<script>
-			// Set theme before first paint to avoid a flash of the wrong mode.
+			// Set theme before first paint to avoid a flash of the wrong mode. The
+			// background is painted here too so the very first frame is already the
+			// right colour (Instagram's canvas is #fafafa light / #000 dark).
 			(function () {
 				try {
 					var saved = localStorage.getItem("chillnet-theme");
@@ -17,6 +19,11 @@
 						? saved === "dark"
 						: window.matchMedia("(prefers-color-scheme: dark)").matches;
 					document.documentElement.classList.toggle("dark", dark);
+					document.documentElement.style.background = dark ? "#000" : "#fafafa";
+					var meta = document.createElement("meta");
+					meta.name = "theme-color";
+					meta.content = dark ? "#000000" : "#ffffff";
+					document.head.appendChild(meta);
 				} catch (e) {}
 			})();
 		</script>
