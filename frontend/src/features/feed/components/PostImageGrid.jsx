@@ -1,57 +1,125 @@
+import { useRef, useState } from "react";
+import { CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { cn } from "../../../lib/cn";
 
-// Responsive 1-4 image mosaic. Corners are clipped by the rounded container so
-// the inner tiles butt together like a gallery. A 5th+ image collapses into a
-// "+N" overlay on the last visible tile.
-export default function PostImageGrid({ images = [], onOpen }) {
+// Instagram's post media: a single scroll-snap carousel (never a mosaic), full
+// bleed inside the card, with dot indicators and hover arrows for multi-image
+// posts. `variant="detail"` swaps the square feed crop for a letterboxed,
+// object-contain view against a black backdrop for the post-detail column.
+export default function PostImageGrid({ images = [], onOpen, variant = "feed" }) {
+	const scrollRef = useRef(null);
+	const [active, setActive] = useState(0);
+
 	if (!images.length) return null;
 
-	const shown = images.slice(0, 4);
-	const extra = images.length - shown.length;
-	const count = shown.length;
+	const multi = images.length > 1;
 
-	const cellBase =
-		"group relative block h-full w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800";
+	const scrollTo = (i) => {
+		const el = scrollRef.current;
+		if (!el) return;
+		el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+	};
+
+	const onScroll = () => {
+		const el = scrollRef.current;
+		if (!el || !el.clientWidth) return;
+		setActive(Math.round(el.scrollLeft / el.clientWidth));
+	};
+
+	const go = (delta) => {
+		const next = (active + delta + images.length) % images.length;
+		setActive(next);
+		scrollTo(next);
+	};
+
+	const isDetail = variant === "detail";
 
 	return (
 		<div
 			className={cn(
-				"grid gap-1 overflow-hidden rounded-2xl ring-1 ring-black/5 dark:ring-white/10",
-				count === 1 && "grid-cols-1",
-				count === 2 && "grid-cols-2",
-				count === 3 && "h-80 grid-cols-2 grid-rows-2",
-				count === 4 && "grid-cols-2",
+				"group relative w-full overflow-hidden",
+				isDetail ? "h-full bg-black" : "aspect-square bg-fill",
 			)}
 		>
-			{shown.map((url, i) => (
-				<button
-					type="button"
-					key={`${url}-${i}`}
-					onClick={() => onOpen?.(i)}
-					className={cn(
-						cellBase,
-						count === 1 && "max-h-[34rem]",
-						count === 3 && i === 0 && "row-span-2",
-					)}
-				>
-					<img
-						src={url}
-						alt={`Ảnh bài viết ${i + 1}`}
-						loading="lazy"
-						className={cn(
-							"h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]",
-							count === 1 && "max-h-[34rem]",
-							count === 2 && "aspect-square",
-							count === 4 && "aspect-square",
-						)}
-					/>
-					{extra > 0 && i === shown.length - 1 && (
-						<span className="absolute inset-0 flex items-center justify-center bg-zinc-950/55 text-2xl font-semibold text-white">
-							+{extra}
-						</span>
-					)}
-				</button>
-			))}
+			<div
+				ref={scrollRef}
+				onScroll={onScroll}
+				className={cn(
+					"flex snap-x snap-mandatory overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+					isDetail ? "h-full items-center" : "h-full",
+				)}
+			>
+				{images.map((url, i) =>
+					onOpen ? (
+						<button
+							type="button"
+							key={`${url}-${i}`}
+							onClick={() => onOpen(i)}
+							className="h-full w-full shrink-0 snap-center"
+						>
+							<img
+								src={url}
+								alt={`Ảnh bài viết ${i + 1}`}
+								loading="lazy"
+								className={cn(
+									"h-full w-full",
+									isDetail ? "object-contain" : "object-cover",
+								)}
+							/>
+						</button>
+					) : (
+						<div key={`${url}-${i}`} className="h-full w-full shrink-0 snap-center">
+							<img
+								src={url}
+								alt={`Ảnh bài viết ${i + 1}`}
+								loading="lazy"
+								className={cn(
+									"h-full w-full",
+									isDetail ? "object-contain" : "object-cover",
+								)}
+							/>
+						</div>
+					),
+				)}
+			</div>
+
+			{multi && (
+				<>
+					<button
+						type="button"
+						onClick={(e) => {
+							e.stopPropagation();
+							go(-1);
+						}}
+						aria-label="Ảnh trước"
+						className="absolute left-2 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full bg-white/80 p-1 text-[#000] opacity-0 transition-opacity group-hover:opacity-100 sm:flex"
+					>
+						<CaretLeft size={18} weight="bold" />
+					</button>
+					<button
+						type="button"
+						onClick={(e) => {
+							e.stopPropagation();
+							go(1);
+						}}
+						aria-label="Ảnh sau"
+						className="absolute right-2 top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full bg-white/80 p-1 text-[#000] opacity-0 transition-opacity group-hover:opacity-100 sm:flex"
+					>
+						<CaretRight size={18} weight="bold" />
+					</button>
+					<div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
+						{images.map((_, i) => (
+							<span
+								key={i}
+								className={cn(
+									"h-1.5 w-1.5 rounded-full transition-colors",
+									i === active ? "bg-accent" : "bg-white/70",
+								)}
+							/>
+						))}
+					</div>
+				</>
+			)}
 		</div>
 	);
 }

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ImageSquare, PaperPlaneRight, X } from "@phosphor-icons/react";
-import { Avatar, Button, Card, Textarea, useToast } from "../../../components/ui";
+import { Image as ImageIcon, X } from "@phosphor-icons/react";
+import { Avatar, Button, Modal, Textarea, useToast } from "../../../components/ui";
 import api, { http, toFormData } from "../../../lib/api";
 import endpoints from "../../../lib/endpoints";
 import { useAuth } from "../../../lib/auth";
@@ -9,13 +8,14 @@ import { displayName } from "../../../lib/format";
 
 const MAX_IMAGES = 4;
 
-// Top-of-feed composer. Sends multipart (`/post/create`, fields `content` +
-// `images`) when photos are attached, otherwise the lighter JSON endpoint.
-export default function PostComposer({ onCreated }) {
+// Instagram's "create post" dialog: a drop zone that turns into an image grid
+// + caption once photos are picked. Opened by `FeedPage` from `?create=1` or
+// the story tray's "+" button. Sends multipart (`/post/create`) when photos
+// are attached, otherwise the lighter JSON endpoint.
+export default function PostComposer({ open, onClose, onCreated }) {
 	const { user } = useAuth();
 	const toast = useToast();
 	const fileRef = useRef(null);
-	const reduce = useReducedMotion();
 
 	const [content, setContent] = useState("");
 	const [attachments, setAttachments] = useState([]); // { file, url }
@@ -25,7 +25,17 @@ export default function PostComposer({ onCreated }) {
 	const name = displayName(profile);
 	const avatar = profile?.avatar || profile?.avatarUrl || profile?.imageUrl;
 
-	// Free the object URLs when the composer unmounts.
+	// Reset the draft each time the modal closes so it opens fresh next time.
+	useEffect(() => {
+		if (open) return;
+		setContent("");
+		setAttachments((prev) => {
+			prev.forEach((a) => URL.revokeObjectURL(a.url));
+			return [];
+		});
+	}, [open]);
+
+	// Free any remaining object URLs when the composer unmounts.
 	useEffect(() => {
 		return () => attachments.forEach((a) => URL.revokeObjectURL(a.url));
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -39,7 +49,7 @@ export default function PostComposer({ onCreated }) {
 		if (!chosen.length) return;
 		const room = MAX_IMAGES - attachments.length;
 		if (chosen.length > room) {
-			toast(`Chỉ đính kèm tối đa ${MAX_IMAGES} ảnh.`, { type: "info" });
+			toast(`Chỉ đính kèm tối đa ${MAX_IMAGES} ảnh.`);
 		}
 		const next = chosen.slice(0, room).map((file) => ({
 			file,
@@ -76,11 +86,8 @@ export default function PostComposer({ onCreated }) {
 					content: content.trim(),
 				});
 			}
-			onCreated?.(created);
-			attachments.forEach((a) => URL.revokeObjectURL(a.url));
-			setAttachments([]);
-			setContent("");
 			toast.success("Đã đăng bài viết.");
+			onCreated?.(created);
 		} catch (err) {
 			toast.error(err?.message || "Không đăng được bài, thử lại sau.");
 		} finally {
@@ -89,87 +96,79 @@ export default function PostComposer({ onCreated }) {
 	};
 
 	return (
-		<Card className="p-4">
-			<div className="flex gap-3">
-				<Avatar src={avatar} name={name} size="md" />
-				<div className="min-w-0 flex-1">
+		<Modal open={open} onClose={onClose} title="Tạo bài viết mới" size="md">
+			<input
+				ref={fileRef}
+				type="file"
+				accept="image/*"
+				multiple
+				hidden
+				onChange={pickFiles}
+			/>
+
+			<div className="flex items-center gap-3 border-b border-line-soft pb-3">
+				<Avatar src={avatar} name={name} size="sm" />
+				<span className="text-sm font-semibold text-ink">{name}</span>
+			</div>
+
+			{attachments.length === 0 ? (
+				<div className="flex flex-col items-center justify-center gap-4 py-14 text-center">
+					<span className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-line text-faint">
+						<ImageIcon size={30} weight="light" />
+					</span>
+					<p className="text-base text-ink">Kéo ảnh và video vào đây</p>
+					<Button type="button" onClick={() => fileRef.current?.click()}>
+						Chọn từ máy tính
+					</Button>
+				</div>
+			) : (
+				<div className="py-3">
+					<div className="grid grid-cols-4 gap-2">
+						{attachments.map((a, i) => (
+							<div key={a.url} className="group relative aspect-square overflow-hidden rounded">
+								<img
+									src={a.url}
+									alt={`Ảnh đính kèm ${i + 1}`}
+									className="h-full w-full object-cover"
+								/>
+								<button
+									type="button"
+									onClick={() => removeAt(i)}
+									aria-label="Gỡ ảnh"
+									className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white transition-opacity hover:opacity-80"
+								>
+									<X size={12} />
+								</button>
+							</div>
+						))}
+						{attachments.length < MAX_IMAGES && (
+							<button
+								type="button"
+								onClick={() => fileRef.current?.click()}
+								aria-label="Thêm ảnh"
+								className="flex aspect-square items-center justify-center rounded border border-dashed border-line text-faint hover:text-muted"
+							>
+								<ImageIcon size={22} weight="light" />
+							</button>
+						)}
+					</div>
+
 					<Textarea
 						value={content}
 						onChange={(e) => setContent(e.target.value)}
 						rows={3}
-						placeholder="Bạn đang nghĩ gì?"
+						placeholder="Viết chú thích..."
 						aria-label="Nội dung bài viết"
+						className="mt-3"
 					/>
-
-					<AnimatePresence initial={false}>
-						{attachments.length > 0 && (
-							<motion.div
-								initial={reduce ? false : { opacity: 0, height: 0 }}
-								animate={{ opacity: 1, height: "auto" }}
-								exit={{ opacity: 0, height: 0 }}
-								className="mt-3 grid grid-cols-4 gap-2 overflow-hidden"
-							>
-								{attachments.map((a, i) => (
-									<div
-										key={a.url}
-										className="group relative aspect-square overflow-hidden rounded-xl ring-1 ring-black/5 dark:ring-white/10"
-									>
-										<img
-											src={a.url}
-											alt={`Ảnh đính kèm ${i + 1}`}
-											className="h-full w-full object-cover"
-										/>
-										<button
-											type="button"
-											onClick={() => removeAt(i)}
-											aria-label="Gỡ ảnh"
-											className="absolute right-1 top-1 rounded-full bg-zinc-950/60 p-1 text-white transition-colors hover:bg-zinc-950/80"
-										>
-											<X size={14} />
-										</button>
-									</div>
-								))}
-							</motion.div>
-						)}
-					</AnimatePresence>
-
-					<div className="mt-3 flex items-center justify-between">
-						<div>
-							<input
-								ref={fileRef}
-								type="file"
-								accept="image/*"
-								multiple
-								hidden
-								onChange={pickFiles}
-							/>
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								onClick={() => fileRef.current?.click()}
-								disabled={attachments.length >= MAX_IMAGES}
-							>
-								<ImageSquare size={18} weight="bold" />
-								Ảnh
-								<span className="font-mono text-xs text-zinc-400">
-									{attachments.length}/{MAX_IMAGES}
-								</span>
-							</Button>
-						</div>
-						<Button
-							type="button"
-							size="sm"
-							onClick={submit}
-							loading={submitting}
-							disabled={!canSubmit}
-						>
-							<PaperPlaneRight size={16} weight="fill" />
-							Đăng
-						</Button>
-					</div>
 				</div>
+			)}
+
+			<div className="mt-2 flex justify-end border-t border-line-soft pt-3">
+				<Button type="button" onClick={submit} loading={submitting} disabled={!canSubmit}>
+					Đăng
+				</Button>
 			</div>
-		</Card>
+		</Modal>
 	);
 }
