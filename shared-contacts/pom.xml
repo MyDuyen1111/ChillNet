@@ -33,13 +33,7 @@
 
     </dependencies>
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
-    </build>
+    <!-- Module library thuần: không dùng spring-boot-maven-plugin
+         (repackage sẽ fail vì không có main class) -->
 
 </project>
