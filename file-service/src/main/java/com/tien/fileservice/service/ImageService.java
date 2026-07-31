@@ -6,28 +6,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.cloudinary.utils.ObjectUtils;
-import com.mongodb.lang.Nullable;
-import com.tien.sharedcommon.converter.MediaConverter;
-import com.tien.sharedcontacts.media.ImageUploadEvent;
-import com.tien.sharedcontacts.media.ImageUploadedEvent;
-import com.tien.sharedcontacts.media.MultipleImageResponse;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.cloudinary.Cloudinary;
 import com.cloudinary.Transformation;
+import com.cloudinary.utils.ObjectUtils;
+import com.mongodb.lang.Nullable;
 import com.tien.fileservice.dto.response.UploadResponse;
 import com.tien.fileservice.entity.Image;
-import com.tien.sharedcontacts.media.entity.ImageType;
 import com.tien.fileservice.entity.ImageVersions;
 import com.tien.fileservice.exception.AppException;
 import com.tien.fileservice.exception.ErrorCode;
 import com.tien.fileservice.mapper.ImageMapper;
 import com.tien.fileservice.repository.ImageRepository;
+import com.tien.sharedcommon.converter.MediaConverter;
+import com.tien.sharedcontacts.media.ImageUploadEvent;
+import com.tien.sharedcontacts.media.ImageUploadedEvent;
+import com.tien.sharedcontacts.media.MultipleImageResponse;
+import com.tien.sharedcontacts.media.entity.ImageType;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -40,10 +39,9 @@ import lombok.extern.slf4j.Slf4j;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class ImageService {
 
-    private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
-            "image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"
-    );
-    
+    private static final Set<String> ALLOWED_CONTENT_TYPES =
+            Set.of("image/jpeg", "image/png", "image/webp", "image/gif", "image/avif");
+
     private static final long MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB in bytes
 
     Cloudinary cloudinary;
@@ -51,8 +49,6 @@ public class ImageService {
     ImageRepository imageRepository;
 
     ImageMapper imageMapper;
-
-    KafkaTemplate<String, Object> kafkaTemplate;
 
     @Transactional
     public MultipleImageResponse uploadImages(ImageUploadEvent event) {
@@ -78,13 +74,8 @@ public class ImageService {
                     props = event.propertiesMap()[i];
                 }
 
-                ImageUploadedEvent uploadedEvent = uploadImage(
-                        base64,
-                        event.imageType(),
-                        event.ownerId(),
-                        event.postId(),
-                        props
-                );
+                ImageUploadedEvent uploadedEvent =
+                        uploadImage(base64, event.imageType(), event.ownerId(), event.postId(), props);
                 uploadedEvents.add(uploadedEvent);
             }
         } catch (AppException e) {
@@ -120,16 +111,16 @@ public class ImageService {
         return uploadImage(base64, event.imageType(), event.ownerId(), event.postId(), props);
     }
 
-
     // upload single image json
-    private ImageUploadedEvent uploadImage(String base64, ImageType imageType, String ownerId, String postId, Map<String, Object> properties)
+    private ImageUploadedEvent uploadImage(
+            String base64, ImageType imageType, String ownerId, String postId, Map<String, Object> properties)
             throws IOException {
         if (base64 == null || base64.isBlank()) {
             throw new AppException(ErrorCode.FILE_EMPTY);
         }
         // Decode Base64 to bytes
         byte[] bytes = MediaConverter.decodeFromBase64(base64);
-        
+
         // Validate file size
         if (bytes.length > MAX_FILE_SIZE) {
             throw new AppException(ErrorCode.FILE_TOO_LARGE);
@@ -138,15 +129,22 @@ public class ImageService {
         final String folder = buildFolder(imageType, ownerId, postId);
 
         Map<String, Object> options = ObjectUtils.asMap(
-                "folder", folder,
-                "resource_type", "image",
-                "unique_filename", true,   // tránh đụng public_id
-                "overwrite", false,        // không ghi đè ngẫu nhiên
-                "invalidate", true,        // xóa cache CDN khi cần (có ích nếu sau này overwrite)
-                "quality", "auto",
-                "fetch_format", "auto",
-                "use_filename", false
-        );
+                "folder",
+                folder,
+                "resource_type",
+                "image",
+                "unique_filename",
+                true, // tránh đụng public_id
+                "overwrite",
+                false, // không ghi đè ngẫu nhiên
+                "invalidate",
+                true, // xóa cache CDN khi cần (có ích nếu sau này overwrite)
+                "quality",
+                "auto",
+                "fetch_format",
+                "auto",
+                "use_filename",
+                false);
 
         final Map<?, ?> uploadResult;
         try {
@@ -157,10 +155,13 @@ public class ImageService {
 
         String publicId = (String) uploadResult.get("public_id");
         String url = (String) uploadResult.get("secure_url");
-        String format = uploadResult.get("format") != null ? uploadResult.get("format").toString() : null;
+        String format =
+                uploadResult.get("format") != null ? uploadResult.get("format").toString() : null;
         Integer width = (Integer) uploadResult.get("width");
         Integer height = (Integer) uploadResult.get("height");
-        String version = uploadResult.get("version") != null ? uploadResult.get("version").toString() : null;
+        String version = uploadResult.get("version") != null
+                ? uploadResult.get("version").toString()
+                : null;
 
         // Determine content type from format
         String contentType = format != null ? "image/" + format.toLowerCase() : "image/jpeg";
@@ -184,20 +185,17 @@ public class ImageService {
         image = imageRepository.save(image);
         log.info("Saved image to MongoDB with id: {}", image.getId());
 
-        Map<String, Object> safeProps = (properties == null)
-                ? Map.of()
-                : Map.copyOf(properties);
+        Map<String, Object> safeProps = (properties == null) ? Map.of() : Map.copyOf(properties);
 
         // uploaded callback
         return new ImageUploadedEvent(publicId, url, safeProps);
     }
 
-    //upload multiple image form data
+    // upload multiple image form data
     @Transactional
-    public List<UploadResponse> uploadMultipleImages(List<MultipartFile> files,
-                                                     ImageType imageType,
-                                                     String ownerId,
-                                                     @Nullable String postId) throws IOException {
+    public List<UploadResponse> uploadMultipleImages(
+            List<MultipartFile> files, ImageType imageType, String ownerId, @Nullable String postId)
+            throws IOException {
         List<UploadResponse> responses = new ArrayList<>();
         for (MultipartFile file : files) {
             responses.add(uploadImage(file, imageType, ownerId, postId));
@@ -205,12 +203,9 @@ public class ImageService {
         return responses;
     }
 
-    //upload single image form data
+    // upload single image form data
     @Transactional
-    public UploadResponse uploadImage(MultipartFile file,
-                                      ImageType imageType,
-                                      String ownerId,
-                                      @Nullable String postId)
+    public UploadResponse uploadImage(MultipartFile file, ImageType imageType, String ownerId, @Nullable String postId)
             throws IOException {
         if (file == null || file.isEmpty()) {
             throw new AppException(ErrorCode.FILE_EMPTY);
@@ -232,15 +227,22 @@ public class ImageService {
         final String folder = buildFolder(imageType, ownerId, postId);
 
         Map<String, Object> options = ObjectUtils.asMap(
-                "folder", folder,
-                "resource_type", "image",
-                "unique_filename", true,       // tránh đụng public_id
-                "overwrite", false,            // không ghi đè ngẫu nhiên
-                "invalidate", true,            // xóa cache CDN khi cần
-                "quality", "auto",
-                "fetch_format", "auto",
-                "use_filename", false
-        );
+                "folder",
+                folder,
+                "resource_type",
+                "image",
+                "unique_filename",
+                true, // tránh đụng public_id
+                "overwrite",
+                false, // không ghi đè ngẫu nhiên
+                "invalidate",
+                true, // xóa cache CDN khi cần
+                "quality",
+                "auto",
+                "fetch_format",
+                "auto",
+                "use_filename",
+                false);
 
         final Map<?, ?> uploadResult;
         try {
@@ -260,7 +262,8 @@ public class ImageService {
                 .format(uploadResult.get("format").toString())
                 .width((Integer) uploadResult.get("width"))
                 .height((Integer) uploadResult.get("height"))
-                .imageVersions(generateImageVersions(uploadResult.get("public_id").toString()))
+                .imageVersions(
+                        generateImageVersions(uploadResult.get("public_id").toString()))
                 .version(uploadResult.get("version").toString())
                 .build();
         image = imageRepository.save(image);
@@ -288,10 +291,9 @@ public class ImageService {
         return switch (imageType) {
             case AVATAR -> "avatars/%s".formatted(ownerId);
             case POST_IMAGE -> "posts/%s/%s".formatted(ownerId, postId);
-            case BACKGROUND_IMAGE ->  "backgrounds/%s".formatted(ownerId);
+            case BACKGROUND_IMAGE -> "backgrounds/%s".formatted(ownerId);
             case GROUP_AVATAR -> "groups/%s/avatar".formatted(ownerId);
             case GROUP_COVER -> "groups/%s/cover".formatted(ownerId);
         };
     }
-
 }

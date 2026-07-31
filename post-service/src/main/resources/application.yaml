@@ -20,7 +20,7 @@ spring:
       max-request-size: 50MB
   data:
     mongodb:
-      uri: ${MONGODB_URI:mongodb://root:814362@localhost:27017/post-service?authSource=admin}
+      uri: ${MONGODB_URI:mongodb://root:814362@localhost:27018/post-service?authSource=admin}
 app:
   services:
     profile:

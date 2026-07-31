@@ -9,10 +9,9 @@
 | Service                        | Port | Mô tả                                  |
 | ------------------------------ | ---- | ---------------------------------------- |
 | **API Gateway**          | 8080 | Điểm vào chính cho tất cả requests |
-| **Config Server**        | 8888 | Quản lý cấu hình tập trung          |
 | **Identity Service**     | 8081 | Đăng ký, đăng nhập, xác thực JWT |
 | **Profile Service**      | 8082 | Quản lý profile người dùng          |
-| **Notification Service** | 8083 | Thông báo qua Kafka và SendGrid       |
+| **Notification Service** | 8083 | Thông báo in-app và email (Brevo)     |
 | **Post Service**         | 8084 | Quản lý bài đăng, lưu, chia sẻ    |
 | **File Service**         | 8085 | Upload file và media (Cloudinary)       |
 | **Chat Service**         | 8086 | Chat real-time với WebSocket            |
@@ -20,43 +19,46 @@
 | **Interaction Service**  | 8088 | Comment và like                         |
 | **Group Service**        | 8089 | Quản lý nhóm, thành viên, quyền    |
 
+Các service gọi nhau đồng bộ qua **OpenFeign**; cấu hình nằm tĩnh trong `application.yaml` của từng service.
+
 ## 🛠️ Tech Stack
 
-- **Backend**: Java 17, Spring Boot 3.5.5, Spring Cloud
+- **Backend**: Java 17, Spring Boot 3.5.5, Spring Cloud (Gateway, OpenFeign)
 - **Database**: MySQL, MongoDB
-- **Message Queue**: Apache Kafka
-- **Cache**: Redis
 - **Authentication**: JWT, OAuth2
 - **APIs**: Swagger (Springdoc OpenAPI)
 - **Storage**: Cloudinary (media)
-- **Email**: SendGrid
+- **Email**: Brevo
 
 ## 🚀 Cài đặt
 
 ### Yêu cầu
 
-- Java 17+, Maven 3.6+
-- MySQL 8.0+, MongoDB 6.0+
-- Redis 6.0+, Apache Kafka 3.0+
+- Java 17+, Maven 3.6+ (hoặc dùng mvnw có sẵn trong từng service)
+- Docker (cho MySQL + MongoDB)
 
 ### Chạy services
 
-1. **Khởi động infrastructure**: MySQL, MongoDB, Redis, Kafka
-2. **Khởi động services theo thứ tự**:
+1. **Khởi động hạ tầng** (MySQL + MongoDB, đã cap RAM):
 
    ```bash
-   # 1. Config Server (8888)
-   # 2. API Gateway (8080)
-   # 3. Identity Service (8081)
-   # 4. Các service còn lại
+   docker compose -f docker-compose.infra.yml up -d
    ```
-3. **Build và chạy**:
+2. **Build toàn bộ** (shared libs trước, rồi 10 service):
 
    ```bash
-   mvn clean install
-   cd <service-name>
-   mvn spring-boot:run
+   scripts/build-all.sh
    ```
+3. **Chạy toàn bộ stack** (heap đã cap, tổng ~3GB):
+
+   ```bash
+   export JWT_SIGNER_KEY=<chuỗi bí mật HS512>   # bắt buộc
+   scripts/run-all.sh
+   # dừng: scripts/stop-all.sh
+   ```
+
+   Env tùy chọn (thiếu thì service vẫn chạy, chỉ tính năng tương ứng không hoạt động):
+   `CLIENT_ID`/`CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` (Google login), `CLOUD_NAME`/`API_KEY`/`API_SECRET` (upload ảnh), `BREVO_APIKEY` (email).
 4. **Truy cập**:
 
    - API Gateway: `http://localhost:8080`
@@ -71,14 +73,13 @@
 - ✅ Kết bạn, follow, block
 - ✅ Chat real-time (1-1 và group)
 - ✅ Quản lý nhóm với quyền hạn
-- ✅ Thông báo qua email và Kafka
+- ✅ Thông báo in-app và qua email
 
 ## 📂 Cấu trúc dự án
 
 ```
 chillnet/
 ├── api-gateway/          # API Gateway
-├── config-server/        # Config Server
 ├── identity-service/     # Authentication
 ├── profile-service/      # User profiles
 ├── notification-service/ # Notifications
@@ -89,7 +90,7 @@ chillnet/
 ├── interaction-service/ # Comments & likes
 ├── group-service/        # Groups
 ├── shared-common/       # Shared utilities
-└── shared-contacts/     # Shared contacts
+└── shared-contacts/     # Shared media contracts
 ```
 
 ## 📜 License

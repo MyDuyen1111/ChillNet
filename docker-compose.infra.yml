@@ -28,7 +28,8 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: "814362"
     command: --wiredTigerCacheSizeGB 0.5
     ports:
-      - "27017:27017"
+      # 27018 phía host vì 27017 hay bị chiếm (VSCode/Mongo có sẵn trên máy dev)
+      - "27018:27017"
     volumes:
       - chillnet_mongo_data:/data/db
     mem_limit: 768m

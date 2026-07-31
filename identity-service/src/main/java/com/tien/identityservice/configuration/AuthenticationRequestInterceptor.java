@@ -23,6 +23,9 @@ public class AuthenticationRequestInterceptor implements RequestInterceptor {
         ServletRequestAttributes servletRequestAttributes =
                 (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
 
+        // Gọi từ luồng @Async sẽ không có request context — bỏ qua việc forward header
+        if (servletRequestAttributes == null) return;
+
         var authHeader = servletRequestAttributes.getRequest().getHeader("Authorization");
 
         log.info("Header: {}", authHeader);

@@ -1,11 +1,21 @@
 package com.tien.interactionservice.service;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.tien.interactionservice.dto.PageResponse;
 import com.tien.interactionservice.dto.request.CreateLikeRequest;
 import com.tien.interactionservice.dto.response.LikeResponse;
 import com.tien.interactionservice.dto.response.ProfileResponse;
 import com.tien.interactionservice.entity.Like;
-import com.tien.interactionservice.event.LikeEvent;
 import com.tien.interactionservice.exception.AppException;
 import com.tien.interactionservice.exception.ErrorCode;
 import com.tien.interactionservice.mapper.LikeMapper;
@@ -13,22 +23,11 @@ import com.tien.interactionservice.repository.CommentRepository;
 import com.tien.interactionservice.repository.LikeRepository;
 import com.tien.interactionservice.repository.httpclient.PostClient;
 import com.tien.interactionservice.repository.httpclient.ProfileClient;
+
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -40,9 +39,6 @@ public class LikeService {
     PostClient postClient;
     ProfileClient profileClient;
     LikeMapper likeMapper;
-    KafkaTemplate<String, Object> kafkaTemplate;
-
-    private static final String LIKE_TOPIC = "like.events";
 
     @Transactional
     public LikeResponse createLike(CreateLikeRequest request) {
@@ -51,14 +47,18 @@ public class LikeService {
         // Check if already liked
         if (request.getPostId() != null) {
             validatePostExists(request.getPostId());
-            if (likeRepository.findByUserIdAndPostIdAndCommentIdIsNull(userId, request.getPostId()).isPresent()) {
+            if (likeRepository
+                    .findByUserIdAndPostIdAndCommentIdIsNull(userId, request.getPostId())
+                    .isPresent()) {
                 throw new AppException(ErrorCode.ALREADY_LIKED);
             }
         } else {
             if (commentRepository.findById(request.getCommentId()).isEmpty()) {
                 throw new AppException(ErrorCode.COMMENT_NOT_FOUND);
             }
-            if (likeRepository.findByUserIdAndCommentIdAndPostIdIsNull(userId, request.getCommentId()).isPresent()) {
+            if (likeRepository
+                    .findByUserIdAndCommentIdAndPostIdIsNull(userId, request.getCommentId())
+                    .isPresent()) {
                 throw new AppException(ErrorCode.ALREADY_LIKED);
             }
         }
@@ -71,9 +71,6 @@ public class LikeService {
 
         like = likeRepository.save(like);
 
-        // Publish event
-        publishLikeEvent(like, "CREATED");
-
         return buildLikeResponse(like);
     }
 
@@ -81,52 +78,43 @@ public class LikeService {
     public void unlike(String likeId) {
         String userId = getCurrentUserId();
 
-        Like like = likeRepository.findById(likeId)
-                .orElseThrow(() -> new AppException(ErrorCode.LIKE_NOT_FOUND));
+        Like like = likeRepository.findById(likeId).orElseThrow(() -> new AppException(ErrorCode.LIKE_NOT_FOUND));
 
         if (!like.getUserId().equals(userId)) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
 
         likeRepository.delete(like);
-
-        // Publish event
-        publishLikeEvent(like, "DELETED");
     }
 
     @Transactional
     public void unlikeByPost(String postId) {
         String userId = getCurrentUserId();
 
-        Like like = likeRepository.findByUserIdAndPostIdAndCommentIdIsNull(userId, postId)
+        Like like = likeRepository
+                .findByUserIdAndPostIdAndCommentIdIsNull(userId, postId)
                 .orElseThrow(() -> new AppException(ErrorCode.LIKE_NOT_FOUND));
 
         likeRepository.delete(like);
-
-        // Publish event
-        publishLikeEvent(like, "DELETED");
     }
 
     @Transactional
     public void unlikeByComment(String commentId) {
         String userId = getCurrentUserId();
 
-        Like like = likeRepository.findByUserIdAndCommentIdAndPostIdIsNull(userId, commentId)
+        Like like = likeRepository
+                .findByUserIdAndCommentIdAndPostIdIsNull(userId, commentId)
                 .orElseThrow(() -> new AppException(ErrorCode.LIKE_NOT_FOUND));
 
         likeRepository.delete(like);
-
-        // Publish event
-        publishLikeEvent(like, "DELETED");
     }
 
     public PageResponse<LikeResponse> getLikesByPost(String postId, int page, int size) {
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by("createdAt").descending());
         Page<Like> likesPage = likeRepository.findByPostIdAndCommentIdIsNull(postId, pageable);
 
-        List<LikeResponse> likeResponses = likesPage.getContent().stream()
-                .map(this::buildLikeResponse)
-                .collect(Collectors.toList());
+        List<LikeResponse> likeResponses =
+                likesPage.getContent().stream().map(this::buildLikeResponse).collect(Collectors.toList());
 
         return PageResponse.<LikeResponse>builder()
                 .content(likeResponses)
@@ -145,7 +133,9 @@ public class LikeService {
 
     public boolean isPostLiked(String postId) {
         String userId = getCurrentUserId();
-        return likeRepository.findByUserIdAndPostIdAndCommentIdIsNull(userId, postId).isPresent();
+        return likeRepository
+                .findByUserIdAndPostIdAndCommentIdIsNull(userId, postId)
+                .isPresent();
     }
 
     private LikeResponse buildLikeResponse(Like like) {
@@ -153,7 +143,7 @@ public class LikeService {
 
         // Map các field có thể map từ entity
         LikeResponse response = likeMapper.toLikeResponse(like);
-        
+
         // Enrich các field không thể map
         // Hiển thị họ + tên thay vì username
         if (profile != null) {
@@ -164,13 +154,16 @@ public class LikeService {
             response.setUsername(null);
             response.setUserAvatar(null);
         }
-        
+
         return response;
     }
 
     private String getDisplayName(String firstName, String lastName, String username) {
         // Nếu có cả firstName và lastName, hiển thị "firstName lastName"
-        if (firstName != null && !firstName.trim().isEmpty() && lastName != null && !lastName.trim().isEmpty()) {
+        if (firstName != null
+                && !firstName.trim().isEmpty()
+                && lastName != null
+                && !lastName.trim().isEmpty()) {
             return (firstName.trim() + " " + lastName.trim()).trim();
         }
         // Nếu chỉ có lastName, hiển thị lastName (thường là username)
@@ -208,25 +201,7 @@ public class LikeService {
         }
     }
 
-    private void publishLikeEvent(Like like, String eventType) {
-        try {
-            LikeEvent event = LikeEvent.builder()
-                    .likeId(like.getId())
-                    .userId(like.getUserId())
-                    .postId(like.getPostId())
-                    .commentId(like.getCommentId())
-                    .eventType(eventType)
-                    .timestamp(Instant.now())
-                    .build();
-            kafkaTemplate.send(LIKE_TOPIC, event);
-            log.info("Published like event: {} for likeId: {}", eventType, like.getId());
-        } catch (Exception e) {
-            log.error("Error publishing like event: {}", e.getMessage(), e);
-        }
-    }
-
     private String getCurrentUserId() {
         return SecurityContextHolder.getContext().getAuthentication().getName();
     }
 }
-
