@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { Camera, Image as ImageIcon } from "@phosphor-icons/react";
 import { Avatar, Button, Input, Modal, Textarea, useToast } from "../../../components/ui";
 import { http, toFormData } from "../../../lib/api";
 import api from "../../../lib/api";
@@ -8,6 +7,24 @@ import { displayName } from "../../../lib/format";
 import { genderLabel } from "./profileUtils";
 
 const GENDERS = ["Nam", "Nữ", "Khác"];
+
+// One "label left, field right" row, Instagram's edit-profile page layout.
+// The label only moves to the right column and right-aligns from `md` up;
+// on mobile it sits above the field like a normal form label.
+function FieldRow({ label, htmlFor, children }) {
+	return (
+		<div className="grid grid-cols-1 gap-1.5 py-3.5 md:grid-cols-[160px_1fr] md:items-start md:gap-6">
+			{label ? (
+				<label htmlFor={htmlFor} className="text-sm font-semibold text-ink md:pt-2 md:text-right">
+					{label}
+				</label>
+			) : (
+				<div className="hidden md:block" />
+			)}
+			<div>{children}</div>
+		</div>
+	);
+}
 
 // Edit-profile dialog: text fields (PUT /users/my-profile) plus avatar and
 // background uploads (PUT multipart, field name "file"). Images are previewed
@@ -101,30 +118,50 @@ export default function EditProfileModal({ open, profile, onClose, onSaved }) {
 	}
 
 	const name = displayName({ ...profile, ...form });
-	const labelCls = "text-sm font-medium text-zinc-700 dark:text-zinc-300";
 	const selectCls =
-		"h-11 w-full rounded-xl border border-zinc-300 bg-white px-3.5 text-sm text-zinc-900 transition-colors focus:border-brand-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
+		"h-10 w-full rounded border border-line bg-canvas px-3 text-sm text-ink transition-colors focus:border-muted";
 	const extraGender = form.gender && !GENDERS.includes(form.gender);
 
 	return (
 		<Modal open={open} onClose={close} title="Chỉnh sửa trang cá nhân" size="lg">
-			<form onSubmit={handleSubmit} className="max-h-[72vh] space-y-5 overflow-y-auto pr-1">
-				{/* Cover + avatar pickers */}
-				<div>
-					<div className="relative h-36 overflow-hidden rounded-2xl bg-zinc-100 dark:bg-zinc-800">
-						{bgPreview ? (
-							<img src={bgPreview} alt="Ảnh bìa" className="h-full w-full object-cover" />
-						) : (
-							<div className="h-full w-full bg-gradient-to-br from-brand-500 to-brand-700" />
-						)}
-						<button
-							type="button"
-							onClick={() => bgInput.current?.click()}
-							className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-xl bg-zinc-950/60 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-zinc-950/75"
-						>
-							<ImageIcon size={16} />
+			<form onSubmit={handleSubmit} className="max-h-[72vh] divide-y divide-line-soft overflow-y-auto pr-1">
+				{/* Avatar */}
+				<FieldRow>
+					<div className="flex items-center gap-4">
+						<Avatar src={avatarPreview} name={name} size="lg" />
+						<div className="space-y-1">
+							<p className="text-sm font-semibold text-ink">{profile?.username || name}</p>
+							<Button
+								type="button"
+								variant="link"
+								size="sm"
+								className="px-0"
+								onClick={() => avatarInput.current?.click()}
+							>
+								Đổi ảnh đại diện
+							</Button>
+						</div>
+						<input
+							ref={avatarInput}
+							type="file"
+							accept="image/*"
+							className="hidden"
+							onChange={(e) => pickImage(e.target.files?.[0], setAvatarFile, setAvatarPreview)}
+						/>
+					</div>
+				</FieldRow>
+
+				{/* Background image, still editable here even though it no longer shows in the header */}
+				<FieldRow label="Ảnh bìa">
+					<div className="flex items-center gap-4">
+						<div className="h-16 w-28 shrink-0 overflow-hidden rounded bg-fill">
+							{bgPreview && (
+								<img src={bgPreview} alt="Ảnh bìa" className="h-full w-full object-cover" />
+							)}
+						</div>
+						<Button type="button" variant="secondary" size="sm" onClick={() => bgInput.current?.click()}>
 							Đổi ảnh bìa
-						</button>
+						</Button>
 						<input
 							ref={bgInput}
 							type="file"
@@ -133,71 +170,55 @@ export default function EditProfileModal({ open, profile, onClose, onSaved }) {
 							onChange={(e) => pickImage(e.target.files?.[0], setBgFile, setBgPreview)}
 						/>
 					</div>
-					<div className="-mt-10 flex items-end gap-4 px-4">
-						<div className="relative">
-							<Avatar src={avatarPreview} name={name} size="xl" ring className="ring-4" />
-							<button
-								type="button"
-								onClick={() => avatarInput.current?.click()}
-								aria-label="Đổi ảnh đại diện"
-								className="absolute bottom-0 right-0 inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-white shadow-sm hover:bg-brand-500"
-							>
-								<Camera size={16} weight="fill" />
-							</button>
-							<input
-								ref={avatarInput}
-								type="file"
-								accept="image/*"
-								className="hidden"
-								onChange={(e) => pickImage(e.target.files?.[0], setAvatarFile, setAvatarPreview)}
-							/>
-						</div>
-						<p className="pb-1 text-xs text-zinc-500">
-							Ảnh đại diện và ảnh bìa sẽ được cập nhật khi bạn lưu.
-						</p>
-					</div>
-				</div>
+				</FieldRow>
 
-				{/* Text fields */}
-				<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<Input label="Họ" value={form.firstName} onChange={set("firstName")} placeholder="Nguyễn" />
-					<Input label="Tên" value={form.lastName} onChange={set("lastName")} placeholder="An" />
-					<Input label="Ngày sinh" type="date" value={form.dob} onChange={set("dob")} />
-					<div className="flex flex-col gap-1.5">
-						<label htmlFor="edit-gender" className={labelCls}>
-							Giới tính
-						</label>
-						<select id="edit-gender" value={form.gender} onChange={set("gender")} className={selectCls}>
-							<option value="">Chọn giới tính</option>
-							{GENDERS.map((g) => (
-								<option key={g} value={g}>
-									{g}
-								</option>
-							))}
-							{extraGender && <option value={form.gender}>{genderLabel(form.gender)}</option>}
-						</select>
-					</div>
-					<Input label="Thành phố" value={form.city} onChange={set("city")} placeholder="Hồ Chí Minh" />
-					<Input label="Quốc gia" value={form.country} onChange={set("country")} placeholder="Việt Nam" />
-					<Input label="Số điện thoại" value={form.phoneNumber} onChange={set("phoneNumber")} placeholder="09xx xxx xxx" />
-					<Input label="Website" value={form.website} onChange={set("website")} placeholder="chillnet.vn" />
-				</div>
-				<Textarea
-					label="Tiểu sử"
-					rows={3}
-					value={form.bio}
-					onChange={set("bio")}
-					placeholder="Vài dòng giới thiệu về bạn..."
-				/>
+				<FieldRow label="Họ" htmlFor="edit-firstName">
+					<Input id="edit-firstName" value={form.firstName} onChange={set("firstName")} placeholder="Nguyễn" />
+				</FieldRow>
+				<FieldRow label="Tên" htmlFor="edit-lastName">
+					<Input id="edit-lastName" value={form.lastName} onChange={set("lastName")} placeholder="An" />
+				</FieldRow>
+				<FieldRow label="Tiểu sử" htmlFor="edit-bio">
+					<Textarea
+						id="edit-bio"
+						rows={3}
+						value={form.bio}
+						onChange={set("bio")}
+						placeholder="Vài dòng giới thiệu về bạn..."
+					/>
+				</FieldRow>
+				<FieldRow label="Ngày sinh" htmlFor="edit-dob">
+					<Input id="edit-dob" type="date" value={form.dob} onChange={set("dob")} />
+				</FieldRow>
+				<FieldRow label="Giới tính" htmlFor="edit-gender">
+					<select id="edit-gender" value={form.gender} onChange={set("gender")} className={selectCls}>
+						<option value="">Chọn giới tính</option>
+						{GENDERS.map((g) => (
+							<option key={g} value={g}>
+								{g}
+							</option>
+						))}
+						{extraGender && <option value={form.gender}>{genderLabel(form.gender)}</option>}
+					</select>
+				</FieldRow>
+				<FieldRow label="Thành phố" htmlFor="edit-city">
+					<Input id="edit-city" value={form.city} onChange={set("city")} placeholder="Hồ Chí Minh" />
+				</FieldRow>
+				<FieldRow label="Quốc gia" htmlFor="edit-country">
+					<Input id="edit-country" value={form.country} onChange={set("country")} placeholder="Việt Nam" />
+				</FieldRow>
+				<FieldRow label="Số điện thoại" htmlFor="edit-phone">
+					<Input id="edit-phone" value={form.phoneNumber} onChange={set("phoneNumber")} placeholder="09xx xxx xxx" />
+				</FieldRow>
+				<FieldRow label="Website" htmlFor="edit-website">
+					<Input id="edit-website" value={form.website} onChange={set("website")} placeholder="chillnet.vn" />
+				</FieldRow>
 
-				<div className="flex justify-end gap-2 pt-1">
-					<Button type="button" variant="ghost" onClick={close} disabled={saving}>
-						Hủy
-					</Button>
+				<FieldRow>
 					<Button type="submit" variant="primary" loading={saving}>
-						Lưu thay đổi
+						Gửi
 					</Button>
-				</div>
+				</FieldRow>
 			</form>
 		</Modal>
 	);

@@ -2,31 +2,27 @@ import {
 	Cake,
 	GenderIntersex,
 	Globe,
+	IdentificationCard,
 	Info,
 	MapPin,
 	Phone,
 	CalendarBlank,
 } from "@phosphor-icons/react";
-import { Card, EmptyState } from "../../../components/ui";
+import { EmptyState } from "../../../components/ui";
 import { formatDate, genderLabel } from "./profileUtils";
 
 function Row({ icon: Icon, label, children }) {
 	return (
-		<div className="flex items-start gap-3 px-5 py-3.5">
-			<span className="mt-0.5 text-zinc-400 dark:text-zinc-500">
-				<Icon size={20} />
-			</span>
-			<div className="min-w-0">
-				<p className="text-xs text-zinc-500">{label}</p>
-				<p className="break-words text-sm font-medium text-zinc-800 dark:text-zinc-100">
-					{children}
-				</p>
-			</div>
+		<div className="flex items-center gap-3 py-3.5">
+			<Icon size={18} className="shrink-0 text-muted" />
+			<span className="w-32 shrink-0 text-sm text-muted">{label}</span>
+			<span className="min-w-0 flex-1 break-words text-sm text-ink">{children}</span>
 		</div>
 	);
 }
 
-// Detailed profile information pulled straight from ProfileResponse.
+// Detailed profile information pulled straight from ProfileResponse, laid out
+// as a flat row list rather than a coloured card.
 export default function AboutTab({ profile }) {
 	const location = [profile.city, profile.country].filter(Boolean).join(", ");
 	const website = profile.website;
@@ -62,7 +58,7 @@ export default function AboutTab({ profile }) {
 	if (rows.length === 0 && !website) {
 		return (
 			<EmptyState
-				icon={Info}
+				icon={IdentificationCard}
 				title="Chưa có thông tin"
 				description="Người dùng này chưa cập nhật thông tin giới thiệu."
 			/>
@@ -70,7 +66,7 @@ export default function AboutTab({ profile }) {
 	}
 
 	return (
-		<Card className="divide-y divide-zinc-100 dark:divide-zinc-800">
+		<div className="divide-y divide-line">
 			{rows.map((r) => (
 				<Row key={r.key} icon={r.icon} label={r.label}>
 					{r.value}
@@ -82,12 +78,12 @@ export default function AboutTab({ profile }) {
 						href={/^https?:\/\//i.test(website) ? website : `https://${website}`}
 						target="_blank"
 						rel="noreferrer noopener"
-						className="text-brand-600 hover:underline dark:text-brand-400"
+						className="text-accent-strong hover:underline"
 					>
 						{website}
 					</a>
 				</Row>
 			)}
-		</Card>
+		</div>
 	);
 }
