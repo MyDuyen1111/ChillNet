@@ -1,8 +1,11 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-	ArrowLeft,
+	CaretLeft,
 	ChatCircle,
-	UsersThree,
+	Info,
+	Phone,
+	VideoCamera,
 	WarningCircle,
 } from "@phosphor-icons/react";
 import {
@@ -13,22 +16,58 @@ import {
 	Skeleton,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
-import { conversationAvatar, conversationTitle, isGroup } from "../utils";
+import {
+	conversationAvatar,
+	conversationTitle,
+	formatDivider,
+	isGroup,
+	otherParticipant,
+} from "../utils";
 import MessageBubble from "./MessageBubble";
 import Composer from "./Composer";
 
+// Two consecutive messages this far apart (ms) get their own time divider.
+const GROUP_GAP_MS = 15 * 60 * 1000;
+
 function HeaderSubtitle({ conversation, connected }) {
 	const group = isGroup(conversation);
-	const dot = connected ? "bg-brand-500" : "bg-amber-500";
-	const label = connected ? "Trực tuyến" : "Đang đồng bộ";
+	if (group) {
+		return (
+			<p className="truncate text-xs text-muted">
+				{conversation?.participants?.length ?? 0} thành viên
+			</p>
+		);
+	}
 	return (
-		<div className="flex items-center gap-1.5 text-xs text-zinc-500">
-			<span className={cn("h-1.5 w-1.5 rounded-full", dot)} />
-			<span>
-				{group
-					? `${conversation?.participants?.length ?? 0} thành viên`
-					: label}
-			</span>
+		<p className="truncate text-xs text-muted">
+			{connected ? "Đang hoạt động" : "Đang đồng bộ..."}
+		</p>
+	);
+}
+
+function ThreadIntro({ conversation, title, group, otherUser }) {
+	const navigate = useNavigate();
+	const subtitle = group
+		? `${conversation?.participants?.length ?? 0} thành viên`
+		: otherUser?.username
+			? `@${otherUser.username}`
+			: "ChillNet";
+
+	return (
+		<div className="flex flex-col items-center gap-3 px-4 pb-8 pt-4 text-center">
+			<Avatar src={conversationAvatar(conversation)} name={title} size="xl" />
+			<div>
+				<p className="text-xl font-semibold text-ink">{title}</p>
+				<p className="text-sm text-muted">{subtitle}</p>
+			</div>
+			{!group && otherUser?.userId && (
+				<Button
+					variant="secondary"
+					onClick={() => navigate(`/profile/${otherUser.userId}`)}
+				>
+					Xem trang cá nhân
+				</Button>
+			)}
 		</div>
 	);
 }
@@ -48,7 +87,7 @@ function MessagesSkeleton() {
 					key={i}
 					className={cn("flex", r.mine ? "justify-end" : "justify-start")}
 				>
-					<Skeleton className={cn("h-10 rounded-2xl", r.w)} />
+					<Skeleton className={cn("h-10 rounded-[22px]", r.w)} />
 				</div>
 			))}
 		</div>
@@ -72,6 +111,7 @@ export default function ChatWindow({
 		? conversationTitle(conversation, currentUserId)
 		: "Đang tải...";
 	const group = isGroup(conversation);
+	const otherUser = otherParticipant(conversation, currentUserId);
 
 	// Stick to the bottom as new messages arrive (and on first load).
 	useEffect(() => {
@@ -80,31 +120,35 @@ export default function ChatWindow({
 	}, [messages.length, loading, conversationId]);
 
 	return (
-		<div className="flex h-full min-w-0 flex-col bg-zinc-50 dark:bg-zinc-950">
+		<div className="flex h-full min-w-0 flex-col">
 			{/* Header */}
-			<div className="flex items-center gap-3 border-b border-zinc-200 bg-white px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900">
-				<div className="lg:hidden">
+			<div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-line px-4">
+				<div className="md:hidden">
 					<IconButton label="Quay lại" onClick={onBack}>
-						<ArrowLeft size={20} />
+						<CaretLeft size={22} />
 					</IconButton>
 				</div>
-				<Avatar src={conversationAvatar(conversation)} name={title} size="md" />
+				<Avatar src={conversationAvatar(conversation)} name={title} size="sm" />
 				<div className="min-w-0 flex-1">
-					<p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-						{title}
-					</p>
+					<p className="truncate text-sm font-semibold text-ink">{title}</p>
 					<HeaderSubtitle conversation={conversation} connected={connected} />
 				</div>
-				{group && (
-					<span className="hidden items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500 dark:bg-zinc-800 sm:flex">
-						<UsersThree size={14} />
-						Nhóm
-					</span>
-				)}
+				<IconButton label="Gọi thoại">
+					<Phone size={24} />
+				</IconButton>
+				<IconButton label="Gọi video">
+					<VideoCamera size={24} />
+				</IconButton>
+				<IconButton label="Thông tin cuộc trò chuyện">
+					<Info size={24} />
+				</IconButton>
 			</div>
 
 			{/* Messages */}
-			<div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-4">
+			<div
+				ref={scrollRef}
+				className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-4 py-4"
+			>
 				{loading ? (
 					<MessagesSkeleton />
 				) : error ? (
@@ -118,30 +162,49 @@ export default function ChatWindow({
 							</Button>
 						}
 					/>
-				) : messages.length === 0 ? (
-					<EmptyState
-						icon={ChatCircle}
-						title="Chưa có tin nhắn"
-						description={`Gửi lời chào tới ${title} để bắt đầu cuộc trò chuyện.`}
-					/>
 				) : (
-					<div className="space-y-1.5">
-						{messages.map((m, i) => {
-							const prev = messages[i - 1];
-							const next = messages[i + 1];
-							const sameAsPrev = prev && prev.sender?.userId === m.sender?.userId;
-							const sameAsNext = next && next.sender?.userId === m.sender?.userId;
-							return (
-								<MessageBubble
-									key={m.id}
-									message={m}
-									group={group}
-									showName={!sameAsPrev}
-									showAvatar={!sameAsNext}
-								/>
-							);
-						})}
-					</div>
+					<>
+						<ThreadIntro
+							conversation={conversation}
+							title={title}
+							group={group}
+							otherUser={otherUser}
+						/>
+
+						{messages.length === 0 ? (
+							<EmptyState
+								icon={ChatCircle}
+								title="Chưa có tin nhắn"
+								description={`Gửi lời chào tới ${title} để bắt đầu cuộc trò chuyện.`}
+							/>
+						) : (
+							messages.map((m, i) => {
+								const prev = messages[i - 1];
+								const next = messages[i + 1];
+								const sameAsPrev = prev && prev.sender?.userId === m.sender?.userId;
+								const sameAsNext = next && next.sender?.userId === m.sender?.userId;
+								const showDivider =
+									i === 0 ||
+									new Date(m.createdDate) - new Date(prev.createdDate) >
+										GROUP_GAP_MS;
+								return (
+									<Fragment key={m.id}>
+										{showDivider && (
+											<p className="my-4 text-center text-xs text-muted">
+												{formatDivider(m.createdDate)}
+											</p>
+										)}
+										<MessageBubble
+											message={m}
+											group={group}
+											showName={!sameAsPrev || showDivider}
+											showAvatar={!sameAsNext}
+										/>
+									</Fragment>
+								);
+							})
+						)}
+					</>
 				)}
 			</div>
 

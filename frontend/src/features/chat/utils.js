@@ -31,6 +31,13 @@ export function conversationAvatar(conv) {
 	return conv?.conversationAvatar || undefined;
 }
 
+// The other person in a DIRECT thread (used by the profile-intro block at the
+// top of a conversation). Groups have no single "other person", so null.
+export function otherParticipant(conv, currentUserId) {
+	if (!conv || isGroup(conv)) return null;
+	return (conv.participants || []).find((p) => p.userId !== currentUserId) || null;
+}
+
 // Short clock time for a message bubble ("14:05").
 export function formatClock(value) {
 	if (!value) return "";
@@ -39,6 +46,52 @@ export function formatClock(value) {
 			hour: "2-digit",
 			minute: "2-digit",
 		});
+	} catch {
+		return "";
+	}
+}
+
+// Abbreviated relative time for the conversation list row ("5 phút", "2 ngày"),
+// Instagram-style (no "trước" suffix).
+export function shortTimeAgo(value) {
+	if (!value) return "";
+	try {
+		const diff = Math.max(0, (Date.now() - new Date(value).getTime()) / 1000);
+		const steps = [
+			[60, 1, "giây"],
+			[3600, 60, "phút"],
+			[86400, 3600, "giờ"],
+			[604800, 86400, "ngày"],
+			[2629800, 604800, "tuần"],
+			[31557600, 2629800, "tháng"],
+			[Infinity, 31557600, "năm"],
+		];
+		for (const [limit, unit, label] of steps) {
+			if (diff < limit) return `${Math.max(1, Math.floor(diff / unit))} ${label}`;
+		}
+		return "";
+	} catch {
+		return "";
+	}
+}
+
+// Divider label shown between message clusters that are far apart in time
+// ("14:05" hôm nay, "12 tháng 3, 14:05" ngày khác).
+export function formatDivider(value) {
+	if (!value) return "";
+	try {
+		const d = new Date(value);
+		const now = new Date();
+		const time = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+		if (d.toDateString() === now.toDateString()) return time;
+		const sameYear = d.getFullYear() === now.getFullYear();
+		const datePart = d.toLocaleDateString(
+			"vi-VN",
+			sameYear
+				? { day: "numeric", month: "long" }
+				: { day: "numeric", month: "long", year: "numeric" },
+		);
+		return `${datePart}, ${time}`;
 	} catch {
 		return "";
 	}
