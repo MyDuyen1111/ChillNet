@@ -84,7 +84,8 @@ public class GlobalExceptionHandler {
         if (exception.getCause() instanceof MaxUploadSizeExceededException) {
             errorCode = ErrorCode.MAX_FILE_SIZE_EXCEEDED;
         } else if (exception.getMessage() != null
-                && (exception.getMessage().contains("size") || exception.getMessage().contains("exceeded"))) {
+                && (exception.getMessage().contains("size")
+                        || exception.getMessage().contains("exceeded"))) {
             errorCode = ErrorCode.FILE_TOO_LARGE;
         }
         return ResponseEntity.status(errorCode.getStatusCode())

@@ -1,6 +1,7 @@
 package com.tien.groupservice.dto.request;
 
 import com.tien.groupservice.entity.GroupPrivacy;
+
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,12 +15,11 @@ import lombok.experimental.FieldDefaults;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class UpdateGroupRequest {
-	String name;
-	String description;
-	GroupPrivacy privacy;
-	Boolean requiresApproval;
-	Boolean allowPosting;
-	Boolean moderationRequired;
-	Boolean onlyAdminCanPost;
+    String name;
+    String description;
+    GroupPrivacy privacy;
+    Boolean requiresApproval;
+    Boolean allowPosting;
+    Boolean moderationRequired;
+    Boolean onlyAdminCanPost;
 }
-

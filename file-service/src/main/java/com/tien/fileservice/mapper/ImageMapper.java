@@ -8,7 +8,8 @@ import com.tien.fileservice.entity.Image;
 
 @Mapper(componentModel = "spring")
 public interface ImageMapper {
-    @Mapping(target = "version", expression = "java(image.getVersion() != null ? Long.parseLong(image.getVersion()) : null)")
+    @Mapping(
+            target = "version",
+            expression = "java(image.getVersion() != null ? Long.parseLong(image.getVersion()) : null)")
     UploadResponse toUploadResponse(Image image);
 }
-

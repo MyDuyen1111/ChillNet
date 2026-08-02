@@ -51,23 +51,19 @@ public class AuthenticationController {
     public ApiResponse<Void> verifyUser(@RequestBody VerifyUserRequest request) {
         log.info("Đang xác thực OTP cho email: {}", request.getEmail());
         authenticationService.verifyUser(request);
-        return ApiResponse.<Void>builder()
-                .build();
+        return ApiResponse.<Void>builder().build();
     }
 
     @PostMapping("/resend-verification")
     public ApiResponse<Void> resendVerificationCode(@RequestBody ResendOtpRequest request) {
         authenticationService.resendVerificationCode(request.getEmail());
-        return ApiResponse.<Void>builder()
-                .build();
+        return ApiResponse.<Void>builder().build();
     }
 
     @PostMapping("/token")
     public ApiResponse<AuthenticationResponse> authenticate(@RequestBody AuthenticationRequest request) {
         AuthenticationResponse result = authenticationService.authenticate(request);
-        return ApiResponse.<AuthenticationResponse>builder()
-                .result(result)
-                .build();
+        return ApiResponse.<AuthenticationResponse>builder().result(result).build();
     }
 
     @PostMapping("/introspect")
@@ -89,21 +85,18 @@ public class AuthenticationController {
     @PostMapping("/logout")
     public ApiResponse<Void> logout(@RequestBody LogoutRequest request) throws ParseException, JOSEException {
         authenticationService.logout(request);
-        return ApiResponse.<Void>builder()
-                .build();
+        return ApiResponse.<Void>builder().build();
     }
 
     @PostMapping("/forgot-password")
     public ApiResponse<Void> forgotPassword(@RequestBody @Valid ForgotPasswordRequest request) {
         authenticationService.forgotPassword(request);
-        return ApiResponse.<Void>builder()
-                .build();
+        return ApiResponse.<Void>builder().build();
     }
 
     @PostMapping("/reset-password")
     public ApiResponse<Void> resetPassword(@RequestBody @Valid ResetPasswordRequest request) {
         authenticationService.resetPassword(request);
-        return ApiResponse.<Void>builder()
-                .build();
+        return ApiResponse.<Void>builder().build();
     }
 }

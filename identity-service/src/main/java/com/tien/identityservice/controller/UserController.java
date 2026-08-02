@@ -3,6 +3,7 @@ package com.tien.identityservice.controller;
 import java.util.List;
 
 import jakarta.validation.Valid;
+
 import org.springframework.web.bind.annotation.*;
 
 import com.tien.identityservice.dto.ApiResponse;
@@ -71,8 +72,6 @@ public class UserController {
     @PutMapping("/change-password")
     ApiResponse<Void> changePassword(@RequestBody @Valid ChangePasswordRequest request) {
         userService.changePassword(request);
-        return ApiResponse.<Void>builder()
-                .message("Đổi mật khẩu thành công")
-                .build();
+        return ApiResponse.<Void>builder().message("Đổi mật khẩu thành công").build();
     }
 }

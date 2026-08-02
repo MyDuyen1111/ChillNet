@@ -9,7 +9,6 @@ import lombok.experimental.FieldDefaults;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class MemberRoleResponse {
-	String role;
-	String joinedDate;
+    String role;
+    String joinedDate;
 }
-

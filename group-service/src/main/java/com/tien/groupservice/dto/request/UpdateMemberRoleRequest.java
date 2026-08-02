@@ -1,7 +1,9 @@
 package com.tien.groupservice.dto.request;
 
-import com.tien.groupservice.entity.MemberRole;
 import jakarta.validation.constraints.NotNull;
+
+import com.tien.groupservice.entity.MemberRole;
+
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -15,7 +17,6 @@ import lombok.experimental.FieldDefaults;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class UpdateMemberRoleRequest {
-	@NotNull(message = "Role is required")
-	MemberRole role;
+    @NotNull(message = "Role is required")
+    MemberRole role;
 }
-

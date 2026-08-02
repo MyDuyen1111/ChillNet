@@ -1,9 +1,10 @@
 package com.tien.interactionservice.mapper;
 
-import com.tien.interactionservice.dto.response.CommentResponse;
-import com.tien.interactionservice.entity.Comment;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+
+import com.tien.interactionservice.dto.response.CommentResponse;
+import com.tien.interactionservice.entity.Comment;
 
 @Mapper(componentModel = "spring")
 public interface CommentMapper {
@@ -15,4 +16,3 @@ public interface CommentMapper {
     @Mapping(target = "isLiked", ignore = true)
     CommentResponse toCommentResponse(Comment comment);
 }
-

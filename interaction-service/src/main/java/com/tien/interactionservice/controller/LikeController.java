@@ -1,15 +1,18 @@
 package com.tien.interactionservice.controller;
 
+import jakarta.validation.Valid;
+
+import org.springframework.web.bind.annotation.*;
+
 import com.tien.interactionservice.dto.ApiResponse;
 import com.tien.interactionservice.dto.PageResponse;
 import com.tien.interactionservice.dto.request.CreateLikeRequest;
 import com.tien.interactionservice.dto.response.LikeResponse;
 import com.tien.interactionservice.service.LikeService;
-import jakarta.validation.Valid;
+
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/likes")
@@ -29,24 +32,19 @@ public class LikeController {
     @DeleteMapping("/{id}")
     ApiResponse<Void> unlike(@PathVariable String id) {
         likeService.unlike(id);
-        return ApiResponse.<Void>builder()
-                .build();
+        return ApiResponse.<Void>builder().build();
     }
 
     @DeleteMapping("/post/{postId}")
     ApiResponse<Void> unlikeByPost(@PathVariable String postId) {
         likeService.unlikeByPost(postId);
-        return ApiResponse.<Void>builder()
-                .message("Unlike thành công")
-                .build();
+        return ApiResponse.<Void>builder().message("Unlike thành công").build();
     }
 
     @DeleteMapping("/comment/{commentId}")
     ApiResponse<Void> unlikeByComment(@PathVariable String commentId) {
         likeService.unlikeByComment(commentId);
-        return ApiResponse.<Void>builder()
-                .message("Unlike thành công")
-                .build();
+        return ApiResponse.<Void>builder().message("Unlike thành công").build();
     }
 
     @GetMapping("/post/{postId}")
@@ -60,4 +58,3 @@ public class LikeController {
                 .build();
     }
 }
-

@@ -3,17 +3,16 @@ package com.tien.fileservice.controller;
 import java.io.IOException;
 import java.util.List;
 
-import com.tien.sharedcontacts.media.ImageUploadEvent;
-import com.tien.sharedcontacts.media.ImageUploadedEvent;
-import com.tien.sharedcontacts.media.MultipleImageResponse;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.tien.fileservice.dto.response.UploadResponse;
-import com.tien.sharedcontacts.media.entity.ImageType;
 import com.tien.fileservice.service.ImageService;
+import com.tien.sharedcontacts.media.ImageUploadEvent;
+import com.tien.sharedcontacts.media.ImageUploadedEvent;
+import com.tien.sharedcontacts.media.entity.ImageType;
 
 import lombok.RequiredArgsConstructor;
 
@@ -24,18 +23,18 @@ public class CloudMediaController {
 
     private final ImageService imageService;
 
-//    @PostMapping(value = "/upload-multiple")
-//    public ResponseEntity<MultipleImageResponse> uploadMultipleImages(@RequestBody ImageUploadEvent event) {
-//        var response = imageService.uploadImages(event);
-//        return ResponseEntity.ok(response);
-//    }
+    //    @PostMapping(value = "/upload-multiple")
+    //    public ResponseEntity<MultipleImageResponse> uploadMultipleImages(@RequestBody ImageUploadEvent event) {
+    //        var response = imageService.uploadImages(event);
+    //        return ResponseEntity.ok(response);
+    //    }
 
     @PostMapping(value = "/upload")
-    public ResponseEntity<ImageUploadedEvent> uploadImage(@RequestBody ImageUploadEvent imageUploadEvent) throws IOException {
+    public ResponseEntity<ImageUploadedEvent> uploadImage(@RequestBody ImageUploadEvent imageUploadEvent)
+            throws IOException {
         var response = imageService.uploadImage(imageUploadEvent);
         return ResponseEntity.ok(response);
     }
-
 
     @PostMapping(value = "/upload-form-data", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<UploadResponse> uploadImageFD(
@@ -53,7 +52,8 @@ public class CloudMediaController {
             @RequestParam("files") List<MultipartFile> files,
             @RequestParam("type") ImageType imageType,
             @RequestParam("ownerId") String ownerId,
-            @RequestParam(value = "postId", required = false) String postId) throws IOException {
+            @RequestParam(value = "postId", required = false) String postId)
+            throws IOException {
         List<UploadResponse> responses = imageService.uploadMultipleImages(files, imageType, ownerId, postId);
         return ResponseEntity.ok(responses);
     }
