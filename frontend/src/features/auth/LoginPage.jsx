@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { Lock, User } from "@phosphor-icons/react";
 import { useAuth } from "../../lib/auth";
 import { Button, Input, useToast } from "../../components/ui";
 import AuthLayout from "./AuthLayout";
@@ -36,40 +35,47 @@ export default function LoginPage() {
 	};
 
 	return (
-		<AuthLayout title="Đăng nhập" subtitle="Rất vui được gặp lại bạn.">
-			<form onSubmit={onSubmit} className="space-y-4">
+		<AuthLayout
+			footer={
+				<>
+					Bạn chưa có tài khoản?{" "}
+					<Link to="/register" className="font-semibold text-accent">
+						Đăng ký
+					</Link>
+				</>
+			}
+		>
+			<form onSubmit={onSubmit} className="flex flex-col gap-1.5">
 				<Input
-					label="Tên đăng nhập"
 					name="username"
 					value={form.username}
 					onChange={onChange}
-					placeholder="vd: chillguy"
+					placeholder="Tên đăng nhập"
 					autoComplete="username"
-					leftIcon={<User size={18} />}
+					className="bg-canvas"
 					required
 				/>
 				<Input
-					label="Mật khẩu"
 					name="password"
 					type="password"
 					value={form.password}
 					onChange={onChange}
-					placeholder="••••••••"
+					placeholder="Mật khẩu"
 					autoComplete="current-password"
-					leftIcon={<Lock size={18} />}
-					error={error}
+					className="bg-canvas"
 					required
 				/>
-				<Button type="submit" size="lg" loading={loading} className="w-full">
+				{error && <p className="text-center text-sm text-like">{error}</p>}
+				<Button
+					type="submit"
+					variant="primary"
+					size="md"
+					loading={loading}
+					className="mt-3 w-full"
+				>
 					Đăng nhập
 				</Button>
 			</form>
-			<p className="mt-6 text-center text-sm text-zinc-500">
-				Chưa có tài khoản?{" "}
-				<Link to="/register" className="font-semibold text-brand-600 hover:text-brand-500">
-					Đăng ký ngay
-				</Link>
-			</p>
 		</AuthLayout>
 	);
 }

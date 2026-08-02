@@ -1,47 +1,6 @@
 import { motion, useReducedMotion } from "motion/react";
-import {
-	At,
-	Bell,
-	ChatCircle,
-	ChatText,
-	Heart,
-	ShareNetwork,
-	UserCheck,
-	UserPlus,
-	UsersThree,
-} from "@phosphor-icons/react";
+import { Avatar, Button } from "../../../components/ui";
 import { timeAgo } from "../../../lib/format";
-import { cn } from "../../../lib/cn";
-
-// Map a backend `type` string (FRIEND_REQUEST, POST_LIKE, POST_COMMENT,
-// MESSAGE, ...) to a Phosphor icon + accent. Accent lock: brand (teal) for
-// everything, rose reserved for the like/heart case only. Defaults to Bell.
-function metaFor(type) {
-	const t = (type || "").toUpperCase();
-	const brand =
-		"bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300";
-
-	if (t.includes("LIKE"))
-		return {
-			Icon: Heart,
-			weight: "fill",
-			chip: "bg-rose-50 text-rose-500 dark:bg-rose-900/30 dark:text-rose-400",
-		};
-	if (t.includes("COMMENT") || t.includes("REPLY"))
-		return { Icon: ChatCircle, weight: "fill", chip: brand };
-	if (t.includes("MESSAGE") || t.includes("CHAT"))
-		return { Icon: ChatText, weight: "fill", chip: brand };
-	if (t.includes("FRIEND") && (t.includes("ACCEPT") || t.includes("CONFIRM")))
-		return { Icon: UserCheck, weight: "fill", chip: brand };
-	if (t.includes("FRIEND") || t.includes("FOLLOW"))
-		return { Icon: UserPlus, weight: "fill", chip: brand };
-	if (t.includes("GROUP")) return { Icon: UsersThree, weight: "fill", chip: brand };
-	if (t.includes("MENTION") || t.includes("TAG"))
-		return { Icon: At, weight: "bold", chip: brand };
-	if (t.includes("SHARE"))
-		return { Icon: ShareNetwork, weight: "fill", chip: brand };
-	return { Icon: Bell, weight: "fill", chip: brand };
-}
 
 // Best-effort deep link. Conservative on purpose: only navigate when the target
 // route is unambiguous, otherwise just mark the notification read in place.
@@ -56,62 +15,72 @@ export function targetFor(n) {
 	return null;
 }
 
+// Instagram rút gọn mốc thời gian ("2 ngày" thay vì "2 ngày trước"). lib/format
+// chỉ có bản đầy đủ (addSuffix) nên bỏ hậu tố " trước" ở đây, không đụng file dùng chung.
+function shortTimeAgo(value) {
+	return timeAgo(value).replace(/\s*trước$/, "");
+}
+
+// true khi đây là lời mời kết bạn / theo dõi đang chờ (còn cần hành động), khác
+// với thông báo "đã chấp nhận lời mời" (chỉ để đọc, không có nút Theo dõi).
+function isPendingFollow(type) {
+	const t = (type || "").toUpperCase();
+	if (!t.includes("FRIEND") && !t.includes("FOLLOW")) return false;
+	return !t.includes("ACCEPT") && !t.includes("CONFIRM");
+}
+
 export default function NotificationItem({ notification, onSelect }) {
 	const reduce = useReducedMotion();
 	const { type, title, content, isRead, createdAt } = notification;
 	const unread = !isRead;
-	const { Icon, weight, chip } = metaFor(type);
+	const pendingFollow = isPendingFollow(type);
+
+	const handleRowClick = () => onSelect(notification);
+	const handleActionClick = (e) => {
+		e.stopPropagation();
+		onSelect(notification);
+	};
 
 	return (
-		<motion.button
-			type="button"
-			onClick={() => onSelect(notification)}
+		<motion.div
+			role="button"
+			tabIndex={0}
+			onClick={handleRowClick}
+			onKeyDown={(e) => {
+				if (e.key === "Enter" || e.key === " ") {
+					e.preventDefault();
+					handleRowClick();
+				}
+			}}
 			initial={reduce ? false : { opacity: 0, y: 6 }}
 			animate={{ opacity: 1, y: 0 }}
 			transition={{ duration: 0.18, ease: "easeOut" }}
-			className={cn(
-				"group flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors",
-				unread
-					? "bg-brand-50 hover:bg-brand-100/70 dark:bg-brand-900/20 dark:hover:bg-brand-900/30"
-					: "hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
-			)}
+			className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-hover"
 		>
-			<span
-				className={cn(
-					"flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-					chip,
-				)}
-			>
-				<Icon size={18} weight={weight} />
-			</span>
+			<Avatar size="md" />
 
 			<div className="min-w-0 flex-1">
-				{title && (
-					<p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-						{title}
-					</p>
-				)}
-				{content && (
-					<p
-						className={cn(
-							"line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400",
-							title ? "mt-0.5" : "font-medium text-zinc-800 dark:text-zinc-200",
-						)}
-					>
-						{content}
-					</p>
-				)}
-				<p className="mt-1 font-mono text-xs text-zinc-400 dark:text-zinc-500">
-					{timeAgo(createdAt)}
+				<p className="line-clamp-2 text-sm text-ink">
+					{title && <span className="font-semibold">{title} </span>}
+					{content && <span className="font-normal">{content}</span>}
+					{createdAt && <span className="text-muted"> {shortTimeAgo(createdAt)}</span>}
 				</p>
 			</div>
 
-			{unread && (
-				<span
-					aria-hidden
-					className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-500"
-				/>
+			{pendingFollow ? (
+				<Button
+					variant="primary"
+					size="sm"
+					onClick={handleActionClick}
+					className="shrink-0"
+				>
+					Theo dõi
+				</Button>
+			) : (
+				unread && (
+					<span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-accent" />
+				)
 			)}
-		</motion.button>
+		</motion.div>
 	);
 }

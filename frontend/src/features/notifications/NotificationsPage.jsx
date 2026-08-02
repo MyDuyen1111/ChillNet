@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence } from "motion/react";
-import { ArrowClockwise, Bell, Checks } from "@phosphor-icons/react";
-import { Button, Card, EmptyState, Spinner, useToast } from "../../components/ui";
+import { isThisWeek, isToday } from "date-fns";
+import { ArrowClockwise, Heart } from "@phosphor-icons/react";
+import { Button, EmptyState, Spinner, useToast } from "../../components/ui";
 import api from "../../lib/api";
 import endpoints from "../../lib/endpoints";
-import { cn } from "../../lib/cn";
 import NotificationItem, { targetFor } from "./components/NotificationItem";
 import NotificationSkeleton from "./components/NotificationSkeleton";
 
@@ -15,6 +15,32 @@ const FILTERS = [
 	{ key: "all", label: "Tất cả" },
 	{ key: "unread", label: "Chưa đọc" },
 ];
+
+// Nhóm theo mốc thời gian kiểu Instagram. Backend luôn set createdAt (Instant,
+// không null) và trả danh sách đã sắp createdAt giảm dần
+// (NotificationService#getNotifications dùng Sort.by("createdAt").descending()),
+// nên chỉ cần gom các mục liền kề cùng nhãn theo đúng thứ tự, không cần sắp lại.
+function groupLabel(createdAt) {
+	if (!createdAt) return "Trước đó";
+	const d = new Date(createdAt);
+	if (isToday(d)) return "Hôm nay";
+	if (isThisWeek(d, { weekStartsOn: 1 })) return "Tuần này";
+	return "Trước đó";
+}
+
+function groupByTime(list) {
+	const groups = [];
+	for (const n of list) {
+		const label = groupLabel(n.createdAt);
+		const last = groups[groups.length - 1];
+		if (last && last.label === label) {
+			last.items.push(n);
+		} else {
+			groups.push({ label, items: [n] });
+		}
+	}
+	return groups;
+}
 
 export default function NotificationsPage() {
 	const toast = useToast();
@@ -147,103 +173,71 @@ export default function NotificationsPage() {
 		}
 	}, [items, markingAll, refreshUnread, toast, unreadCount]);
 
-	const visible =
-		filter === "unread" ? items.filter((n) => !n.isRead) : items;
+	const visible = filter === "unread" ? items.filter((n) => !n.isRead) : items;
+	const groups = groupByTime(visible);
 
 	return (
-		<div className="mx-auto w-full max-w-2xl px-4 py-6 sm:py-8">
-			<header className="mb-4">
-				<div className="flex items-start justify-between gap-3">
-					<div>
-						<h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 sm:text-2xl">
-							Thông báo
-						</h1>
-						<p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
-							{unreadCount > 0
-								? `${unreadCount} thông báo chưa đọc`
-								: "Bạn đã xem hết thông báo"}
-						</p>
-					</div>
+		<div className="mx-auto max-w-[500px] px-4 pt-4 md:pt-[30px]">
+			<div className="flex items-center justify-between border-b border-line pb-4">
+				<h1 className="text-2xl font-bold text-ink">Thông báo</h1>
+				<Button
+					variant="link"
+					size="sm"
+					onClick={handleMarkAll}
+					loading={markingAll}
+					disabled={unreadCount === 0}
+				>
+					Đánh dấu đã đọc tất cả
+				</Button>
+			</div>
+
+			<div className="flex items-center gap-2 py-3">
+				{FILTERS.map((f) => (
 					<Button
-						variant="ghost"
+						key={f.key}
+						variant={filter === f.key ? "primary" : "secondary"}
 						size="sm"
-						onClick={handleMarkAll}
-						loading={markingAll}
-						disabled={unreadCount === 0}
-						className="shrink-0"
+						onClick={() => setFilter(f.key)}
 					>
-						<Checks size={18} />
-						<span className="hidden sm:inline">Đánh dấu tất cả đã đọc</span>
-						<span className="sm:hidden">Đã đọc hết</span>
+						{f.label}
+						{f.key === "unread" && unreadCount > 0 ? ` (${unreadCount})` : ""}
+					</Button>
+				))}
+			</div>
+
+			{loading ? (
+				<NotificationSkeleton rows={6} />
+			) : error ? (
+				<div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
+					<p className="text-sm text-muted">
+						Không tải được thông báo. Vui lòng thử lại.
+					</p>
+					<Button variant="outline" size="sm" onClick={loadFirst}>
+						<ArrowClockwise size={16} />
+						Thử lại
 					</Button>
 				</div>
-
-				<div className="mt-4 inline-flex gap-1 rounded-full border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-800 dark:bg-zinc-900">
-					{FILTERS.map((f) => {
-						const active = filter === f.key;
-						return (
-							<button
-								key={f.key}
-								type="button"
-								onClick={() => setFilter(f.key)}
-								className={cn(
-									"inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors",
-									active
-										? "bg-brand-600 text-white shadow-sm shadow-brand-600/20"
-										: "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100",
-								)}
-							>
-								{f.label}
-								{f.key === "unread" && unreadCount > 0 && (
-									<span
-										className={cn(
-											"min-w-5 rounded-full px-1.5 text-center font-mono text-xs leading-5",
-											active
-												? "bg-white/20 text-white"
-												: "bg-brand-100 text-brand-700 dark:bg-brand-900/50 dark:text-brand-200",
-										)}
-									>
-										{unreadCount}
-									</span>
-								)}
-							</button>
-						);
-					})}
-				</div>
-			</header>
-
-			<Card className="overflow-hidden">
-				{loading ? (
-					<NotificationSkeleton rows={6} />
-				) : error ? (
-					<div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
-						<p className="text-sm text-zinc-500 dark:text-zinc-400">
-							Không tải được thông báo. Vui lòng thử lại.
-						</p>
-						<Button variant="outline" size="sm" onClick={loadFirst}>
-							<ArrowClockwise size={16} />
-							Thử lại
-						</Button>
-					</div>
-				) : visible.length === 0 ? (
-					<EmptyState
-						icon={Bell}
-						title={
-							filter === "unread"
-								? "Không có thông báo chưa đọc"
-								: "Chưa có thông báo"
-						}
-						description={
-							filter === "unread"
-								? "Bạn đã đọc hết mọi thông báo."
-								: "Khi có hoạt động mới, thông báo sẽ xuất hiện ở đây."
-						}
-					/>
-				) : (
-					<>
-						<div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+			) : visible.length === 0 ? (
+				<EmptyState
+					icon={Heart}
+					title={
+						filter === "unread"
+							? "Không có thông báo chưa đọc"
+							: "Chưa có hoạt động nào"
+					}
+					description={
+						filter === "unread"
+							? "Bạn đã xem hết mọi thông báo."
+							: "Khi có hoạt động mới, thông báo sẽ xuất hiện ở đây."
+					}
+				/>
+			) : (
+				<>
+					{groups.map((g, i) => (
+						<div key={`${g.label}-${i}`}>
+							<h2 className="py-3 text-base font-semibold text-ink">{g.label}</h2>
 							<AnimatePresence initial={false}>
-								{visible.map((n) => (
+								{g.items.map((n) => (
 									<NotificationItem
 										key={n.id}
 										notification={n}
@@ -252,24 +246,21 @@ export default function NotificationsPage() {
 								))}
 							</AnimatePresence>
 						</div>
+					))}
 
-						{hasNext && (
-							<div
-								ref={sentinelRef}
-								className="flex items-center justify-center border-t border-zinc-100 py-4 dark:border-zinc-800"
-							>
-								{loadingMore ? (
-									<Spinner size={20} className="text-brand-500" />
-								) : (
-									<Button variant="ghost" size="sm" onClick={loadMore}>
-										Xem thêm
-									</Button>
-								)}
-							</div>
-						)}
-					</>
-				)}
-			</Card>
+					{hasNext && (
+						<div ref={sentinelRef} className="flex items-center justify-center py-4">
+							{loadingMore ? (
+								<Spinner size={20} className="text-accent" />
+							) : (
+								<Button variant="ghost" size="sm" onClick={loadMore}>
+									Xem thêm
+								</Button>
+							)}
+						</div>
+					)}
+				</>
+			)}
 		</div>
 	);
 }
