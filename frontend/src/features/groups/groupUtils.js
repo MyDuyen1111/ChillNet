@@ -45,21 +45,9 @@ export function privacyMeta(privacy) {
 export const PRIVACY_OPTIONS = ["PUBLIC", "CLOSED", "PRIVATE"];
 
 const ROLE = {
-	ADMIN: {
-		label: "Quản trị viên",
-		Icon: Crown,
-		tint: "bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300",
-	},
-	MODERATOR: {
-		label: "Điều hành viên",
-		Icon: ShieldCheck,
-		tint: "bg-sky-50 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
-	},
-	MEMBER: {
-		label: "Thành viên",
-		Icon: User,
-		tint: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
-	},
+	ADMIN: { label: "Quản trị viên", Icon: Crown },
+	MODERATOR: { label: "Điều hành viên", Icon: ShieldCheck },
+	MEMBER: { label: "Thành viên", Icon: User },
 };
 
 export function roleMeta(role) {

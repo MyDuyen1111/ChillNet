@@ -1,49 +1,52 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { motion, useReducedMotion } from "motion/react";
 import {
 	ArrowLeft,
+	Gear,
+	Plus,
+	ImageSquare,
+	X,
+	SquaresFour,
 	Users,
 	UserPlus,
-	Article,
-	Crown,
-	SignOut,
-	Clock,
 	UsersThree,
 } from "@phosphor-icons/react";
-import { Button, Avatar, Card, EmptyState, Skeleton, useToast } from "../../components/ui";
-import { cn } from "../../lib/cn";
-import api from "../../lib/api";
+import {
+	Button,
+	IconButton,
+	Avatar,
+	Tabs,
+	EmptyState,
+	Skeleton,
+	Modal,
+	Textarea,
+	useToast,
+} from "../../components/ui";
+import api, { http, toFormData } from "../../lib/api";
 import endpoints from "../../lib/endpoints";
 import { useAuth } from "../../lib/auth";
-import {
-	pageItems,
-	pageTotalPages,
-	isMemberOf,
-	isOwner,
-	canManage,
-	privacyMeta,
-	coverUrl,
-	memberCountLabel,
-} from "./groupUtils";
+import { pageItems, pageTotalPages, isMemberOf, canManage, privacyMeta } from "./groupUtils";
 import MemberRow from "./components/MemberRow";
 import JoinRequestRow from "./components/JoinRequestRow";
 import GroupPostCard from "./components/GroupPostCard";
-import { RowsSkeleton } from "./components/GroupSkeletons";
+import { RowsSkeleton, PostGridSkeleton } from "./components/GroupSkeletons";
 
+// Trang chi tiết nhóm ánh xạ theo trang hồ sơ Instagram: avatar + tên + nút
+// hành động, hàng chỉ số (bài viết / thành viên), mô tả, rồi dải tab.
 export default function GroupDetailPage() {
 	const { groupId } = useParams();
 	const { userId } = useAuth();
 	const toast = useToast();
 	const navigate = useNavigate();
-	const reduce = useReducedMotion();
 
 	const [group, setGroup] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(null);
-	const [activeTab, setActiveTab] = useState("members");
+	const [activeTab, setActiveTab] = useState("posts");
 	const [busy, setBusy] = useState(false);
 	const [pending, setPending] = useState(false);
+	const [postCount, setPostCount] = useState(null);
+	const [composeOpen, setComposeOpen] = useState(false);
 
 	// Thành viên
 	const [members, setMembers] = useState([]);
@@ -52,6 +55,7 @@ export default function GroupDetailPage() {
 	const [membersPage, setMembersPage] = useState(1);
 	const [membersTotalPages, setMembersTotalPages] = useState(1);
 	const [membersMore, setMembersMore] = useState(false);
+	const [memberBusyId, setMemberBusyId] = useState(null);
 
 	// Yêu cầu tham gia
 	const [requests, setRequests] = useState([]);
@@ -74,18 +78,33 @@ export default function GroupDetailPage() {
 		setError(null);
 		setGroup(null);
 		setPending(false);
-		setActiveTab("members");
+		setActiveTab("posts");
 		setMembers([]);
 		setMembersLoaded(false);
 		setRequests([]);
 		setRequestsLoaded(false);
 		setPosts([]);
 		setPostsLoaded(false);
+		setPostCount(null);
 		api
 			.get(endpoints.group.byId(groupId))
 			.then((g) => alive && setGroup(g))
 			.catch((e) => alive && setError(e))
 			.finally(() => alive && setLoading(false));
+		return () => {
+			alive = false;
+		};
+	}, [groupId]);
+
+	// Đếm nhanh số bài viết (size=1, chỉ lấy totalElements) để hiện ở hàng chỉ số
+	// ngay cả khi tab "Bài viết" chưa được mở.
+	useEffect(() => {
+		if (!groupId) return;
+		let alive = true;
+		api
+			.get(endpoints.post.byGroup(groupId), { params: { page: 1, size: 1 } })
+			.then((r) => alive && setPostCount(r?.totalElements ?? 0))
+			.catch(() => {});
 		return () => {
 			alive = false;
 		};
@@ -128,12 +147,13 @@ export default function GroupDetailPage() {
 		if (page === 1) setPostsLoading(true);
 		else setPostsMore(true);
 		try {
-			const r = await api.get(endpoints.post.byGroup(groupId), { params: { page, size: 10 } });
+			const r = await api.get(endpoints.post.byGroup(groupId), { params: { page, size: 12 } });
 			const items = pageItems(r);
 			setPosts((prev) => (page === 1 ? items : [...prev, ...items]));
 			setPostsPage(page);
 			setPostsTotalPages(pageTotalPages(r));
 			setPostsLoaded(true);
+			if (page === 1 && typeof r?.totalElements === "number") setPostCount(r.totalElements);
 		} catch (e) {
 			toast.error(e.message || "Không tải được bài viết.");
 		} finally {
@@ -145,9 +165,9 @@ export default function GroupDetailPage() {
 	// Nạp dữ liệu tab khi mở lần đầu.
 	useEffect(() => {
 		if (!group) return;
+		if (activeTab === "posts" && !postsLoaded) loadPosts(1);
 		if (activeTab === "members" && !membersLoaded) loadMembers(1);
 		if (activeTab === "requests" && canMng && !requestsLoaded) loadRequests();
-		if (activeTab === "posts" && !postsLoaded) loadPosts(1);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [activeTab, group]);
 
@@ -220,11 +240,36 @@ export default function GroupDetailPage() {
 		}
 	}
 
+	async function handleRemoveMember(member) {
+		const mid = member.userId ?? member.id;
+		setMemberBusyId(mid);
+		// endpoints.js chưa có route xoá thành viên; ghép từ base group (đúng route backend).
+		const url = `${endpoints.group.byId(groupId)}/members/${member.userId}`;
+		try {
+			await api.delete(url);
+			setMembers((list) => list.filter((m) => (m.userId ?? m.id) !== mid));
+			setGroup((g) => (g ? { ...g, memberCount: Math.max(0, (g.memberCount ?? 1) - 1) } : g));
+			toast.success("Đã xoá thành viên khỏi nhóm.");
+		} catch (e) {
+			toast.error(e.message || "Không xoá được thành viên.");
+		} finally {
+			setMemberBusyId(null);
+		}
+	}
+
+	function handlePostCreated(created) {
+		if (created) {
+			setPosts((prev) => [created, ...prev]);
+			setPostCount((c) => (c == null ? 1 : c + 1));
+		}
+		setComposeOpen(false);
+	}
+
 	if (loading) return <DetailSkeleton />;
 
 	if (error || !group) {
 		return (
-			<div className="mx-auto max-w-2xl">
+			<div className="mx-auto max-w-[935px] px-4 pt-4 md:pt-[30px]">
 				<EmptyState
 					icon={UsersThree}
 					title="Không mở được nhóm"
@@ -239,139 +284,119 @@ export default function GroupDetailPage() {
 		);
 	}
 
-	const owner = isOwner(group, userId);
 	const member = isMemberOf(group);
 	const privacy = privacyMeta(group.privacy);
 	const PrivacyIcon = privacy.Icon;
+	const canPost = member && group.allowPosting !== false && (!group.onlyAdminCanPost || canMng);
 
 	const tabs = [
+		{ key: "posts", label: "Bài viết", icon: SquaresFour },
 		{ key: "members", label: "Thành viên", icon: Users },
 		...(canMng
-			? [{ key: "requests", label: "Yêu cầu tham gia", icon: UserPlus, badge: group.pendingRequestCount }]
+			? [
+					{
+						key: "requests",
+						label: group.pendingRequestCount > 0 ? `Yêu cầu (${group.pendingRequestCount})` : "Yêu cầu",
+						icon: UserPlus,
+					},
+				]
 			: []),
-		{ key: "posts", label: "Bài viết", icon: Article },
 	];
 
 	return (
-		<div className="mx-auto max-w-3xl">
-			<Link
-				to="/groups"
-				className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400"
-			>
+		<div className="mx-auto max-w-[935px] px-4 pt-4 md:pt-[30px]">
+			<Link to="/groups" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
 				<ArrowLeft size={16} /> Nhóm
 			</Link>
 
-			{/* Header */}
-			<Card className="overflow-hidden">
-				<div className="relative h-40 w-full bg-zinc-100 dark:bg-zinc-800 sm:h-52">
-					<img src={coverUrl(group, 1200, 400)} alt="" className="h-full w-full object-cover" />
-					<span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-zinc-950/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur">
-						<PrivacyIcon size={14} weight="bold" />
-						{privacy.label}
-					</span>
+			<div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-10">
+				<div className="flex justify-center sm:block sm:shrink-0">
+					<Avatar src={group.avatarUrl} name={group.name} size="xl" className="sm:hidden" />
+					<Avatar src={group.avatarUrl} name={group.name} size="2xl" className="hidden sm:flex" />
 				</div>
 
-				<div className="p-5">
-					<div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-						<div className="flex items-end gap-4">
-							<Avatar
-								src={group.avatarUrl}
-								name={group.name}
-								size="xl"
-								ring
-								className="-mt-16 border-2 border-white dark:border-zinc-900"
-							/>
-							<div className="min-w-0">
-								<h1 className="truncate text-xl font-bold text-zinc-900 dark:text-zinc-100 sm:text-2xl">
-									{group.name}
-								</h1>
-								<p className="mt-0.5 text-sm text-zinc-500">
-									<span className="font-mono">{memberCountLabel(group.memberCount)}</span>
-									{group.ownerName && (
-										<>
-											{" · "}
-											Tạo bởi{" "}
-											<Link
-												to={`/profile/${group.ownerId}`}
-												className="font-medium text-zinc-600 hover:text-brand-600 dark:text-zinc-300 dark:hover:text-brand-400"
-											>
-												{group.ownerName}
-											</Link>
-										</>
-									)}
-								</p>
-							</div>
-						</div>
+				<div className="min-w-0 flex-1">
+					<div className="flex flex-wrap items-center justify-center gap-4 sm:justify-start">
+						<h1 className="flex items-center gap-2 truncate text-xl font-normal text-ink">
+							{group.name}
+							<PrivacyIcon size={16} className="shrink-0 text-muted" />
+						</h1>
 
-						<div className="shrink-0">
-							{owner ? (
-								<span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
-									<Crown size={16} weight="fill" /> Chủ nhóm
-								</span>
-							) : member ? (
-								<Button variant="outline" loading={busy} onClick={handleLeave}>
-									<SignOut size={18} /> Rời nhóm
-								</Button>
-							) : pending ? (
-								<Button variant="secondary" disabled>
-									<Clock size={18} /> Đã gửi yêu cầu
-								</Button>
-							) : (
-								<Button variant="primary" loading={busy} onClick={handleJoin}>
-									<UserPlus size={18} /> Tham gia
-								</Button>
-							)}
-						</div>
+						{canMng ? (
+							<IconButton label="Quản lý nhóm" onClick={() => setActiveTab("requests")}>
+								<Gear size={22} />
+							</IconButton>
+						) : member ? (
+							<Button variant="secondary" size="md" loading={busy} onClick={handleLeave}>
+								Đã tham gia
+							</Button>
+						) : pending ? (
+							<Button variant="secondary" size="md" disabled>
+								Đã gửi yêu cầu
+							</Button>
+						) : (
+							<Button variant="primary" size="md" loading={busy} onClick={handleJoin}>
+								Tham gia
+							</Button>
+						)}
 					</div>
 
+					<div className="mt-4 flex justify-center gap-10 text-base text-ink sm:justify-start">
+						<span>
+							<span className="font-semibold">
+								{postCount != null ? postCount.toLocaleString("vi-VN") : "…"}
+							</span>{" "}
+							bài viết
+						</span>
+						<span>
+							<span className="font-semibold">{Number(group.memberCount ?? 0).toLocaleString("vi-VN")}</span> thành
+							viên
+						</span>
+					</div>
+
+					{group.ownerName && (
+						<p className="mt-3 text-center text-sm text-muted sm:text-left">
+							Tạo bởi{" "}
+							<Link to={`/profile/${group.ownerId}`} className="font-semibold text-ink hover:text-muted">
+								{group.ownerName}
+							</Link>
+						</p>
+					)}
+
 					{group.description && (
-						<p className="mt-4 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-400">
+						<p className="mt-3 whitespace-pre-wrap text-center text-sm text-ink sm:text-left">
 							{group.description}
 						</p>
 					)}
 				</div>
-			</Card>
-
-			{/* Tabs */}
-			<div className="sticky top-16 z-20 mt-5 flex gap-1 border-b border-zinc-200 bg-zinc-50/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
-				{tabs.map((t) => {
-					const TabIcon = t.icon;
-					const active = activeTab === t.key;
-					return (
-						<button
-							key={t.key}
-							onClick={() => setActiveTab(t.key)}
-							className={cn(
-								"relative flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors",
-								active
-									? "text-brand-600 dark:text-brand-400"
-									: "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200",
-							)}
-						>
-							<TabIcon size={18} weight={active ? "fill" : "regular"} />
-							{t.label}
-							{t.badge > 0 && (
-								<span className="rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
-									{t.badge}
-								</span>
-							)}
-							{active && (
-								<motion.span
-									layoutId={reduce ? undefined : "group-tab"}
-									className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-brand-500"
-								/>
-							)}
-						</button>
-					);
-				})}
 			</div>
 
-			<div className="mt-5">
+			<div className="mt-8">
+				<Tabs items={tabs} value={activeTab} onChange={setActiveTab} />
+			</div>
+
+			<div className="py-6">
+				{activeTab === "posts" && (
+					<TabPosts
+						loading={postsLoading}
+						posts={posts}
+						hasMore={postsPage < postsTotalPages}
+						loadingMore={postsMore}
+						onMore={() => loadPosts(postsPage + 1)}
+						canPost={canPost}
+						onCompose={() => setComposeOpen(true)}
+					/>
+				)}
+
 				{activeTab === "members" && (
 					<TabMembers
 						loading={membersLoading}
 						members={members}
 						ownerId={group.ownerId}
+						canManage={canMng}
+						currentUserId={userId}
+						busyId={memberBusyId}
+						onRemove={handleRemoveMember}
 						hasMore={membersPage < membersTotalPages}
 						loadingMore={membersMore}
 						onMore={() => loadMembers(membersPage + 1)}
@@ -387,63 +412,102 @@ export default function GroupDetailPage() {
 						onReject={(r) => handleProcess(r, false)}
 					/>
 				)}
-
-				{activeTab === "posts" && (
-					<TabPosts
-						loading={postsLoading}
-						posts={posts}
-						hasMore={postsPage < postsTotalPages}
-						loadingMore={postsMore}
-						onMore={() => loadPosts(postsPage + 1)}
-					/>
-				)}
 			</div>
+
+			<CreatePostModal
+				open={composeOpen}
+				onClose={() => setComposeOpen(false)}
+				groupId={groupId}
+				onCreated={handlePostCreated}
+			/>
 		</div>
 	);
 }
 
-function TabMembers({ loading, members, ownerId, hasMore, loadingMore, onMore }) {
-	if (loading)
-		return (
-			<Card>
-				<RowsSkeleton count={6} />
-			</Card>
-		);
+function TabPosts({ loading, posts, hasMore, loadingMore, onMore, canPost, onCompose }) {
+	return (
+		<div>
+			{canPost && (
+				<div className="mb-4 flex justify-end">
+					<Button variant="primary" size="md" onClick={onCompose}>
+						<Plus size={16} weight="bold" /> Tạo bài viết
+					</Button>
+				</div>
+			)}
+
+			{loading ? (
+				<PostGridSkeleton />
+			) : posts.length === 0 ? (
+				<EmptyState icon={SquaresFour} title="Chưa có bài viết" description="Nhóm này chưa có bài đăng nào." />
+			) : (
+				<>
+					<div className="grid grid-cols-3 gap-1">
+						{posts.map((p) => (
+							<GroupPostCard key={p.id} post={p} />
+						))}
+					</div>
+					{hasMore && (
+						<div className="mt-4 flex justify-center">
+							<Button variant="secondary" size="sm" loading={loadingMore} onClick={onMore}>
+								Xem thêm
+							</Button>
+						</div>
+					)}
+				</>
+			)}
+		</div>
+	);
+}
+
+function TabMembers({
+	loading,
+	members,
+	ownerId,
+	canManage,
+	currentUserId,
+	busyId,
+	onRemove,
+	hasMore,
+	loadingMore,
+	onMore,
+}) {
+	if (loading) return <RowsSkeleton count={6} />;
 	if (members.length === 0)
 		return <EmptyState icon={Users} title="Chưa có thành viên" description="Nhóm này chưa có ai." />;
 	return (
-		<Card className="divide-y divide-zinc-100 dark:divide-zinc-800">
-			{members.map((m) => (
-				<MemberRow key={m.id ?? m.userId} member={m} ownerId={ownerId} />
-			))}
+		<div>
+			<div className="divide-y divide-line-soft">
+				{members.map((m) => (
+					<MemberRow
+						key={m.id ?? m.userId}
+						member={m}
+						ownerId={ownerId}
+						canManage={canManage}
+						currentUserId={currentUserId}
+						busy={busyId === (m.userId ?? m.id)}
+						onRemove={() => onRemove(m)}
+					/>
+				))}
+			</div>
 			{hasMore && (
-				<div className="p-3">
-					<Button variant="ghost" size="sm" loading={loadingMore} onClick={onMore} className="w-full">
+				<div className="flex justify-center pt-4">
+					<Button variant="secondary" size="sm" loading={loadingMore} onClick={onMore}>
 						Xem thêm
 					</Button>
 				</div>
 			)}
-		</Card>
+		</div>
 	);
 }
 
 function TabRequests({ loading, requests, busyId, onApprove, onReject }) {
-	if (loading)
-		return (
-			<Card>
-				<RowsSkeleton count={4} />
-			</Card>
-		);
+	if (loading) return <RowsSkeleton count={4} />;
 	if (requests.length === 0)
 		return (
-			<EmptyState
-				icon={UserPlus}
-				title="Không có yêu cầu nào"
-				description="Chưa có ai xin tham gia nhóm."
-			/>
+			<EmptyState icon={UserPlus} title="Không có yêu cầu nào" description="Chưa có ai xin tham gia nhóm." />
 		);
 	return (
-		<Card className="divide-y divide-zinc-100 dark:divide-zinc-800">
+		<div className="divide-y divide-line-soft">
 			{requests.map((r) => (
 				<JoinRequestRow
 					key={r.id}
@@ -453,65 +517,144 @@ function TabRequests({ loading, requests, busyId, onApprove, onReject }) {
 					onReject={() => onReject(r)}
 				/>
 			))}
-		</Card>
+		</div>
 	);
 }
 
-function TabPosts({ loading, posts, hasMore, loadingMore, onMore }) {
-	if (loading)
-		return (
-			<div className="space-y-4">
-				{Array.from({ length: 2 }).map((_, i) => (
-					<Card key={i} className="p-4">
-						<div className="flex items-center gap-3">
-							<Skeleton className="h-10 w-10 rounded-full" />
-							<div className="flex-1">
-								<Skeleton className="h-3.5 w-1/3" />
-								<Skeleton className="mt-2 h-3 w-1/4" />
-							</div>
-						</div>
-						<Skeleton className="mt-3 h-3 w-full" />
-						<Skeleton className="mt-2 h-3 w-4/5" />
-					</Card>
-				))}
-			</div>
-		);
-	if (posts.length === 0)
-		return (
-			<EmptyState icon={Article} title="Chưa có bài viết" description="Nhóm này chưa có bài đăng nào." />
-		);
+const MAX_COMPOSE_IMAGES = 4;
+
+// Modal soạn bài viết trong nhóm. group-service PostRequest hỗ trợ sẵn field
+// `groupId` (post-service PostController /create) nên tái dùng thẳng endpoint
+// tạo bài viết chung, chỉ thêm groupId vào form.
+function CreatePostModal({ open, onClose, groupId, onCreated }) {
+	const toast = useToast();
+	const fileRef = useRef(null);
+	const [content, setContent] = useState("");
+	const [attachments, setAttachments] = useState([]);
+	const [submitting, setSubmitting] = useState(false);
+
+	function pickFiles(e) {
+		const chosen = Array.from(e.target.files || []).filter((f) => f.type.startsWith("image/"));
+		e.target.value = "";
+		if (!chosen.length) return;
+		const room = MAX_COMPOSE_IMAGES - attachments.length;
+		const next = chosen.slice(0, room).map((file) => ({ file, url: URL.createObjectURL(file) }));
+		setAttachments((prev) => [...prev, ...next]);
+	}
+
+	function removeAt(i) {
+		setAttachments((prev) => {
+			URL.revokeObjectURL(prev[i]?.url);
+			return prev.filter((_, idx) => idx !== i);
+		});
+	}
+
+	function reset() {
+		attachments.forEach((a) => URL.revokeObjectURL(a.url));
+		setContent("");
+		setAttachments([]);
+	}
+
+	function handleClose() {
+		if (submitting) return;
+		reset();
+		onClose();
+	}
+
+	async function submit(e) {
+		e.preventDefault();
+		if (!content.trim() && attachments.length === 0) return;
+		setSubmitting(true);
+		try {
+			const form = toFormData({
+				content: content.trim(),
+				images: attachments.map((a) => a.file),
+				groupId,
+			});
+			const res = await http.post(endpoints.post.create, form, {
+				headers: { "Content-Type": "multipart/form-data" },
+			});
+			toast.success("Đã đăng bài viết.");
+			onCreated(res.data?.result);
+			reset();
+		} catch (err) {
+			toast.error(err.message || "Không đăng được bài viết.");
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
 	return (
-		<div className="space-y-4">
-			{posts.map((p) => (
-				<GroupPostCard key={p.id} post={p} />
-			))}
-			{hasMore && (
-				<Button variant="ghost" loading={loadingMore} onClick={onMore} className="w-full">
-					Xem thêm bài viết
-				</Button>
-			)}
-		</div>
+		<Modal open={open} onClose={handleClose} title="Tạo bài viết mới">
+			<form onSubmit={submit} className="space-y-4">
+				<Textarea
+					value={content}
+					onChange={(e) => setContent(e.target.value)}
+					rows={4}
+					placeholder="Bạn đang nghĩ gì?"
+					autoFocus
+				/>
+
+				{attachments.length > 0 && (
+					<div className="grid grid-cols-4 gap-2">
+						{attachments.map((a, i) => (
+							<div key={a.url} className="group relative aspect-square overflow-hidden rounded">
+								<img src={a.url} alt="" className="h-full w-full object-cover" />
+								<button
+									type="button"
+									onClick={() => removeAt(i)}
+									aria-label="Gỡ ảnh"
+									className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
+								>
+									<X size={12} />
+								</button>
+							</div>
+						))}
+					</div>
+				)}
+
+				<div className="flex items-center justify-between border-t border-line pt-3">
+					<input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={pickFiles} />
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						onClick={() => fileRef.current?.click()}
+						disabled={attachments.length >= MAX_COMPOSE_IMAGES}
+					>
+						<ImageSquare size={18} /> Ảnh
+					</Button>
+					<Button
+						type="submit"
+						variant="primary"
+						size="md"
+						loading={submitting}
+						disabled={!content.trim() && attachments.length === 0}
+					>
+						Đăng
+					</Button>
+				</div>
+			</form>
+		</Modal>
 	);
 }
 
 function DetailSkeleton() {
 	return (
-		<div className="mx-auto max-w-3xl">
+		<div className="mx-auto max-w-[935px] px-4 pt-4 md:pt-[30px]">
 			<Skeleton className="mb-4 h-4 w-16" />
-			<Card className="overflow-hidden">
-				<Skeleton className="h-40 w-full rounded-none sm:h-52" />
-				<div className="p-5">
-					<div className="flex items-end gap-4">
-						<Skeleton className="-mt-16 h-24 w-24 rounded-full" />
-						<div className="flex-1">
-							<Skeleton className="h-6 w-1/2" />
-							<Skeleton className="mt-2 h-3 w-1/3" />
-						</div>
-					</div>
-					<Skeleton className="mt-4 h-3 w-full" />
-					<Skeleton className="mt-2 h-3 w-2/3" />
+			<div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-10">
+				<Skeleton className="h-[88px] w-[88px] shrink-0 rounded-full sm:h-[150px] sm:w-[150px]" />
+				<div className="w-full flex-1 space-y-3">
+					<Skeleton className="mx-auto h-6 w-48 sm:mx-0" />
+					<Skeleton className="mx-auto h-4 w-40 sm:mx-0" />
+					<Skeleton className="mx-auto h-4 w-64 sm:mx-0" />
 				</div>
-			</Card>
+			</div>
+			<div className="mt-8 border-t border-line" />
+			<div className="py-6">
+				<PostGridSkeleton />
+			</div>
 		</div>
 	);
 }
