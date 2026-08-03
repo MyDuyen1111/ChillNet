@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Chạy toàn bộ stack ChillNet với heap đã cap (tổng ~3GB cho 10 JVM).
+# Chạy toàn bộ stack ChillNet: 10 JVM (heap đã cap, ~3GB) + ai-service Python (uvicorn, ~60MB).
 # Yêu cầu trước khi chạy:
 #   1. Hạ tầng đã lên:  docker compose -f docker-compose.infra.yml up -d
 #   2. Đã build:        scripts/build-all.sh
@@ -10,7 +10,20 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-: "${JWT_SIGNER_KEY:?Cần export JWT_SIGNER_KEY trước khi chạy (identity-service không có default)}"
+# Nạp cấu hình từ .env nếu có (JWT, OpenAI, Cloudinary, Brevo... để một chỗ).
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
+# Nếu .env/shell đặt JAVA_HOME thì ưu tiên java trong đó (máy có thể không có Java hệ thống).
+if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+  PATH="$JAVA_HOME/bin:$PATH"
+fi
+
+: "${JWT_SIGNER_KEY:?Cần đặt JWT_SIGNER_KEY (trong .env hoặc export) — identity-service không có default}"
 
 mkdir -p logs/pids
 
@@ -38,10 +51,25 @@ declare -A PORT=(
   [social-service]=8087
   [interaction-service]=8088
   [group-service]=8089
+  [ai-service]=8090
 )
 
 start() {
   local svc=$1
+
+  # ai-service là Python/FastAPI — chạy bằng uvicorn từ venv, không phải java -jar.
+  if [ "$svc" = "ai-service" ]; then
+    if [ ! -x ai-service/.venv/bin/python ]; then
+      echo "!! Chưa có venv ai-service — chạy scripts/build-all.sh trước." >&2
+      exit 1
+    fi
+    echo "==> start ai-service (uvicorn, :${PORT[$svc]})"
+    nohup ai-service/.venv/bin/python -m uvicorn main:app \
+      --app-dir ai-service --host 0.0.0.0 --port "${PORT[$svc]}" > "logs/$svc.log" 2>&1 &
+    echo $! > "logs/pids/$svc.pid"
+    return
+  fi
+
   local jar
   jar=$(ls "$svc"/target/*.jar 2>/dev/null | head -1)
   if [ -z "$jar" ]; then
@@ -71,12 +99,12 @@ start identity-service
 wait_port identity-service
 
 for svc in profile-service notification-service post-service file-service chat-service \
-  social-service interaction-service group-service api-gateway; do
+  social-service interaction-service group-service ai-service api-gateway; do
   start "$svc"
 done
 
 for svc in profile-service notification-service post-service file-service chat-service \
-  social-service interaction-service group-service api-gateway; do
+  social-service interaction-service group-service ai-service api-gateway; do
   wait_port "$svc"
 done
 

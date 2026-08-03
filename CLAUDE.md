@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**ChillNet** — a social network built as 10 Spring Boot microservices (Java 17, Spring Boot 3.5.5, Spring Cloud 2025.0.0) plus two shared library modules. Educational/capstone project; the README is in Vietnamese, and much of the code's comments and user-facing error messages are Vietnamese too — match that when editing existing files.
+**ChillNet** — a social network built as 10 Spring Boot microservices (Java 17, Spring Boot 3.5.5, Spring Cloud 2025.0.0) plus one **Python/FastAPI** service (`ai-service`, content moderation) plus two shared library modules. It is a polyglot stack: the 10 Java services share the Maven build/run flow; `ai-service` is a separate Python app (uvicorn). Educational/capstone project; the README is in Vietnamese, and much of the code's comments and user-facing error messages are Vietnamese too — match that when editing existing files.
 
 ## Build & run
 
@@ -32,7 +32,7 @@ Tests are only the generated `contextLoads` smoke tests — there is no real tes
 
 Spotless (palantir-java-format, tabs=4 spaces, import order `java,jakarta,org,com,com.diffplug`) is configured but **not bound to a build phase** — it never runs automatically. Run `spotless:apply` manually before committing Java changes.
 
-Env vars: `JWT_SIGNER_KEY` (identity, **required — no default**). Optional (dummy/empty defaults exist so services still boot; the feature just doesn't work): `CLIENT_ID`/`CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` (identity Google OAuth2), `CLOUD_NAME`/`API_KEY`/`API_SECRET` (file-service Cloudinary), `BREVO_APIKEY` (notification email).
+Env vars: `JWT_SIGNER_KEY` (identity, **required — no default**). Optional (dummy/empty defaults exist so services still boot; the feature just doesn't work): `CLIENT_ID`/`CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` (identity Google OAuth2), `CLOUD_NAME`/`API_KEY`/`API_SECRET` (file-service Cloudinary), `BREVO_APIKEY` (notification email), `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_MODEL` (ai-service moderation — blank key means moderation is skipped/fail-open).
 
 ## Configuration is static, per service
 
@@ -52,6 +52,7 @@ Each service's full config lives in its own `src/main/resources/application.yaml
 | social-service | 8087 | `/social` | MySQL `social_service` |
 | interaction-service | 8088 | `/interaction` | MySQL `interaction_service` |
 | group-service | 8089 | `/group` | MongoDB |
+| ai-service | 8090 | `/ai` | — (**Python/FastAPI**, stateless; calls an OpenAI-compatible LLM) |
 
 MySQL schemas for profile/social are **not** auto-created (no `createDatabaseIfNotExist`) — `scripts/mysql-init/01-create-databases.sql` pre-creates all four via the compose file.
 
@@ -76,9 +77,10 @@ Consequences for writing code in any non-identity service:
 
 Endpoints intended for service-to-service use go in an `InternalPostController`-style class under `@RequestMapping("/internal")` — unauthenticated by `SecurityConfig`, so they are effectively open on the service port.
 
-Two flows worth knowing:
+Three flows worth knowing:
 - **Image upload**: file-service is the only module that talks to Cloudinary. post/profile/group each have an `ImageUploadService` that base64-encodes the `MultipartFile` (`shared-common` `MediaConverter`) into an `ImageUploadEvent` (`shared-contacts`) and POSTs it via `FileClient` to file-service `/images/upload`, getting an `ImageUploadedEvent` back. The caller's JWT is forwarded, so this only works inside an authenticated request.
 - **Notifications/email**: identity-service's `NotificationService` is `@Async` fire-and-forget — it POSTs a `NotificationEvent` to notification-service `/internal/notifications/send` (`InternalNotificationController`), which sends email via Brevo and saves an in-app Notification when `param.userId` is present. Errors are swallowed on both sides so registration/OTP flows never fail because of email.
+- **Content moderation**: post-service `createPost` and interaction-service `createComment` call `ai-service` `POST /internal/moderations/moderate` (via `AiClient` Feign, JWT forwarded) before saving. `ai-service` asks an OpenAI-compatible LLM (`OPENAI_BASE_URL`/`OPENAI_MODEL`) to classify the text and returns `{flagged, severity, categories, reason}`. Callers **fail open** — if the AI call throws or the key is blank they allow the content; they only reject (`CONTENT_VIOLATION`) when `severity == HIGH`. `ai-service` itself is stateless (no DB) and also fails open internally. Note `ai-service` is **Python/FastAPI**, not Spring: `build-all.sh` sets up its `.venv` + `pip install`, `run-all.sh` starts it with `uvicorn` (not `java -jar`), and its `OPENAI_*` env comes from the root `.env`. Env config is loaded by `run-all.sh`/`build-all.sh` sourcing the root `.env` (git-ignored; `.env.example` is the template) — **optional vars there must be commented out, not left empty**, or an empty `CLIENT_ID=` overrides the yaml default and identity-service dies on Google OAuth2 startup.
 
 ## Deliberate duplication
 

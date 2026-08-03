@@ -14,8 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.tien.interactionservice.dto.PageResponse;
 import com.tien.interactionservice.dto.request.CreateCommentRequest;
+import com.tien.interactionservice.dto.request.ModerationRequest;
 import com.tien.interactionservice.dto.request.UpdateCommentRequest;
 import com.tien.interactionservice.dto.response.CommentResponse;
+import com.tien.interactionservice.dto.response.ModerationResponse;
 import com.tien.interactionservice.dto.response.ProfileResponse;
 import com.tien.interactionservice.entity.Comment;
 import com.tien.interactionservice.exception.AppException;
@@ -23,6 +25,7 @@ import com.tien.interactionservice.exception.ErrorCode;
 import com.tien.interactionservice.mapper.CommentMapper;
 import com.tien.interactionservice.repository.CommentRepository;
 import com.tien.interactionservice.repository.LikeRepository;
+import com.tien.interactionservice.repository.httpclient.AiClient;
 import com.tien.interactionservice.repository.httpclient.PostClient;
 import com.tien.interactionservice.repository.httpclient.ProfileClient;
 
@@ -40,6 +43,7 @@ public class CommentService {
     LikeRepository likeRepository;
     PostClient postClient;
     ProfileClient profileClient;
+    AiClient aiClient;
     CommentMapper commentMapper;
 
     @Transactional
@@ -48,6 +52,9 @@ public class CommentService {
 
         // Validate post exists
         validatePostExists(request.getPostId());
+
+        // Kiểm duyệt nội dung bình luận bằng AI (fail-open nếu ai-service không sẵn sàng)
+        moderateContent(request.getContent());
 
         // If parent comment exists, validate it
         if (request.getParentCommentId() != null
@@ -262,5 +269,26 @@ public class CommentService {
 
     private String getCurrentUserId() {
         return SecurityContextHolder.getContext().getAuthentication().getName();
+    }
+
+    // Gọi ai-service kiểm duyệt bình luận. Fail-open: AI lỗi/không cấu hình thì vẫn
+    // cho đăng. Chỉ chặn khi bị gắn cờ mức HIGH.
+    private void moderateContent(String content) {
+        if (content == null || content.trim().isEmpty()) {
+            return;
+        }
+        ModerationResponse verdict;
+        try {
+            var response = aiClient.moderate(
+                    ModerationRequest.builder().text(content).context("COMMENT").build());
+            verdict = (response != null) ? response.getResult() : null;
+        } catch (Exception e) {
+            log.warn("AI moderation không khả dụng, bỏ qua kiểm duyệt: {}", e.getMessage());
+            return;
+        }
+        if (verdict != null && verdict.isFlagged() && "HIGH".equalsIgnoreCase(verdict.getSeverity())) {
+            log.info("Bình luận bị chặn bởi kiểm duyệt AI: {}", verdict.getReason());
+            throw new AppException(ErrorCode.CONTENT_VIOLATION);
+        }
     }
 }

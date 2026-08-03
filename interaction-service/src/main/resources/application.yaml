@@ -31,3 +31,5 @@ app:
       url: http://localhost:8084/post
     profile:
       url: http://localhost:8082/profile
+    ai:
+      url: http://localhost:8090/ai

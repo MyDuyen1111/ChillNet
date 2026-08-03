@@ -33,3 +33,5 @@ app:
       url: http://localhost:8089/group
     file:
       url: http://localhost:8085/file
+    ai:
+      url: http://localhost:8090/ai

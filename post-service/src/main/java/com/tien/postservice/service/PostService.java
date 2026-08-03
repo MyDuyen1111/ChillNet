@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.tien.postservice.dto.PageResponse;
+import com.tien.postservice.dto.request.ModerationRequest;
+import com.tien.postservice.dto.response.ModerationResponse;
 import com.tien.postservice.dto.response.PostResponse;
 import com.tien.postservice.dto.response.UserProfileResponse;
 import com.tien.postservice.entity.Post;
@@ -26,6 +28,7 @@ import com.tien.postservice.mapper.PostMapper;
 import com.tien.postservice.repository.PostRepository;
 import com.tien.postservice.repository.SavedPostRepository;
 import com.tien.postservice.repository.SharedPostRepository;
+import com.tien.postservice.repository.httpclient.AiClient;
 import com.tien.postservice.repository.httpclient.GroupClient;
 import com.tien.postservice.repository.httpclient.InteractionClient;
 import com.tien.postservice.repository.httpclient.ProfileClient;
@@ -48,6 +51,7 @@ public class PostService {
     SocialClient socialClient;
     InteractionClient interactionClient;
     GroupClient groupClient;
+    AiClient aiClient;
     ImageUploadService imageUploadService;
 
     SavedPostRepository savedPostRepository;
@@ -74,6 +78,9 @@ public class PostService {
         if (!hasContent && !hasImages && !hasImageUrls) {
             throw new AppException(ErrorCode.POST_EMPTY);
         }
+
+        // Kiểm duyệt nội dung bằng AI trước khi lưu (fail-open nếu ai-service không sẵn sàng)
+        moderateContent(content);
 
         // Nếu có groupId, kiểm tra quyền đăng bài trong group
         if (groupId != null && !groupId.trim().isEmpty()) {
@@ -124,6 +131,27 @@ public class PostService {
         }
 
         return buildPostResponse(post, userId);
+    }
+
+    // Gọi ai-service kiểm duyệt nội dung. Fail-open: nếu AI lỗi hoặc không cấu hình
+    // thì vẫn cho đăng (giống Brevo/Cloudinary). Chỉ chặn khi bị gắn cờ mức HIGH.
+    private void moderateContent(String content) {
+        if (content == null || content.trim().isEmpty()) {
+            return;
+        }
+        ModerationResponse verdict;
+        try {
+            var response = aiClient.moderate(
+                    ModerationRequest.builder().text(content).context("POST").build());
+            verdict = (response != null) ? response.getResult() : null;
+        } catch (Exception e) {
+            log.warn("AI moderation không khả dụng, bỏ qua kiểm duyệt: {}", e.getMessage());
+            return;
+        }
+        if (verdict != null && verdict.isFlagged() && "HIGH".equalsIgnoreCase(verdict.getSeverity())) {
+            log.info("Bài viết bị chặn bởi kiểm duyệt AI: {}", verdict.getReason());
+            throw new AppException(ErrorCode.CONTENT_VIOLATION);
+        }
     }
 
     public PageResponse<PostResponse> getMyPosts(int page, int size) {

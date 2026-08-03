@@ -18,23 +18,27 @@
 | **Social Service**       | 8087 | Kết bạn, follow, block                 |
 | **Interaction Service**  | 8088 | Comment và like                         |
 | **Group Service**        | 8089 | Quản lý nhóm, thành viên, quyền    |
+| **AI Service**           | 8090 | Kiểm duyệt nội dung bằng LLM (Python/FastAPI, OpenAI-compatible) |
 
 Các service gọi nhau đồng bộ qua **OpenFeign**; cấu hình nằm tĩnh trong `application.yaml` của từng service.
 
 ## 🛠️ Tech Stack
 
 - **Backend**: Java 17, Spring Boot 3.5.5, Spring Cloud (Gateway, OpenFeign)
+- **AI Service**: Python 3, FastAPI + uvicorn (service polyglot riêng)
 - **Database**: MySQL, MongoDB
 - **Authentication**: JWT, OAuth2
 - **APIs**: Swagger (Springdoc OpenAPI)
 - **Storage**: Cloudinary (media)
 - **Email**: Brevo
+- **AI**: LLM tương thích OpenAI (kiểm duyệt nội dung, cấu hình qua `OPENAI_BASE_URL`)
 
 ## 🚀 Cài đặt
 
 ### Yêu cầu
 
 - Java 17+, Maven 3.6+ (hoặc dùng mvnw có sẵn trong từng service)
+- Python 3.10+ (cho ai-service — build-all.sh tự tạo venv)
 - Docker (cho MySQL + MongoDB)
 
 ### Chạy services
@@ -44,7 +48,7 @@ Các service gọi nhau đồng bộ qua **OpenFeign**; cấu hình nằm tĩnh 
    ```bash
    docker compose -f docker-compose.infra.yml up -d
    ```
-2. **Build toàn bộ** (shared libs trước, rồi 10 service):
+2. **Build toàn bộ** (shared libs + 10 service Java, và tự tạo venv cho ai-service Python):
 
    ```bash
    scripts/build-all.sh
@@ -58,7 +62,7 @@ Các service gọi nhau đồng bộ qua **OpenFeign**; cấu hình nằm tĩnh 
    ```
 
    Env tùy chọn (thiếu thì service vẫn chạy, chỉ tính năng tương ứng không hoạt động):
-   `CLIENT_ID`/`CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` (Google login), `CLOUD_NAME`/`API_KEY`/`API_SECRET` (upload ảnh), `BREVO_APIKEY` (email).
+   `CLIENT_ID`/`CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` (Google login), `CLOUD_NAME`/`API_KEY`/`API_SECRET` (upload ảnh), `BREVO_APIKEY` (email), `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_MODEL` (kiểm duyệt AI — thiếu key thì bỏ qua kiểm duyệt, cho đăng bình thường).
 4. **Truy cập**:
 
    - API Gateway: `http://localhost:8080`
@@ -74,6 +78,7 @@ Các service gọi nhau đồng bộ qua **OpenFeign**; cấu hình nằm tĩnh 
 - ✅ Chat real-time (1-1 và group)
 - ✅ Quản lý nhóm với quyền hạn
 - ✅ Thông báo in-app và qua email
+- ✅ Kiểm duyệt nội dung tự động bằng AI (chặn bài/bình luận vi phạm khi đăng)
 
 ## 📂 Cấu trúc dự án
 
@@ -89,6 +94,7 @@ chillnet/
 ├── social-service/       # Friendships
 ├── interaction-service/ # Comments & likes
 ├── group-service/        # Groups
+├── ai-service/           # AI content moderation (Python/FastAPI, OpenAI-compatible)
 ├── shared-common/       # Shared utilities
 └── shared-contacts/     # Shared media contracts
 ```
