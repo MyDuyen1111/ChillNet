@@ -18,11 +18,7 @@ public class SecurityConfig {
 
     private static final String[] PUBLIC_ENDPOINTS = {"/media/download/**"};
     private static final String[] SWAGGER_ENDPOINTS = {
-        "/swagger-ui/**",
-        "/swagger-ui.html",
-        "/v3/api-docs/**",
-        "/swagger-resources/**",
-        "/webjars/**"
+        "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**"
     };
 
     private final CustomJwtDecoder customJwtDecoder;

@@ -110,15 +110,16 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiResponse> handlingMultipartException(MultipartException exception) {
         log.error("Multipart exception: ", exception);
         ErrorCode errorCode = ErrorCode.MAX_REQUEST_SIZE_EXCEEDED;
-        
+
         // Kiểm tra nếu là lỗi file size
         if (exception.getCause() instanceof MaxUploadSizeExceededException) {
             errorCode = ErrorCode.MAX_FILE_SIZE_EXCEEDED;
-        } else if (exception.getMessage() != null && 
-                   (exception.getMessage().contains("size") || exception.getMessage().contains("exceeded"))) {
+        } else if (exception.getMessage() != null
+                && (exception.getMessage().contains("size")
+                        || exception.getMessage().contains("exceeded"))) {
             errorCode = ErrorCode.FILE_TOO_LARGE;
         }
-        
+
         ApiResponse apiResponse = new ApiResponse();
         apiResponse.setCode(errorCode.getCode());
         apiResponse.setMessage(errorCode.getMessage());

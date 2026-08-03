@@ -1,7 +1,9 @@
 package com.tien.groupservice.dto.request;
 
-import com.tien.groupservice.entity.GroupPrivacy;
 import jakarta.validation.constraints.NotBlank;
+
+import com.tien.groupservice.entity.GroupPrivacy;
+
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -15,16 +17,15 @@ import lombok.experimental.FieldDefaults;
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class CreateGroupRequest {
-	@NotBlank(message = "Group name is required")
-	String name;
+    @NotBlank(message = "Group name is required")
+    String name;
 
-	String description;
-	String coverImageUrl;
-	String avatarUrl;
-	GroupPrivacy privacy;
-	Boolean requiresApproval;
-	Boolean allowPosting;
-	Boolean moderationRequired;
-	Boolean onlyAdminCanPost;
+    String description;
+    String coverImageUrl;
+    String avatarUrl;
+    GroupPrivacy privacy;
+    Boolean requiresApproval;
+    Boolean allowPosting;
+    Boolean moderationRequired;
+    Boolean onlyAdminCanPost;
 }
-

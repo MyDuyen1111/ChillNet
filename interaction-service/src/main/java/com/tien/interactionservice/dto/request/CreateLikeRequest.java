@@ -1,6 +1,7 @@
 package com.tien.interactionservice.dto.request;
 
 import jakarta.validation.constraints.AssertTrue;
+
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -21,7 +22,7 @@ public class CreateLikeRequest {
 
     @AssertTrue(message = "Phải cung cấp postId hoặc commentId")
     private boolean isValid() {
-        return (postId != null && !postId.trim().isEmpty()) != (commentId != null && !commentId.trim().isEmpty());
+        return (postId != null && !postId.trim().isEmpty())
+                != (commentId != null && !commentId.trim().isEmpty());
     }
 }
-

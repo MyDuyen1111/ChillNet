@@ -1,12 +1,14 @@
 package com.tien.interactionservice.controller;
 
+import org.springframework.web.bind.annotation.*;
+
 import com.tien.interactionservice.dto.ApiResponse;
 import com.tien.interactionservice.service.CommentService;
 import com.tien.interactionservice.service.LikeService;
+
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
@@ -37,4 +39,3 @@ public class InternalInteractionController {
                 .build();
     }
 }
-

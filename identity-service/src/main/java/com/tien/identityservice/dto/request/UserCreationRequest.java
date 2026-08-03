@@ -1,12 +1,8 @@
 package com.tien.identityservice.dto.request;
 
-import java.time.LocalDate;
-
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-
-import com.tien.identityservice.validator.DobConstraint;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;

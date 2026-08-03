@@ -1,6 +1,7 @@
 package com.tien.identityservice.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
+
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -20,4 +21,3 @@ public class ChangePasswordRequest {
     @NotBlank(message = "Mật khẩu mới không được để trống")
     String newPassword;
 }
-
