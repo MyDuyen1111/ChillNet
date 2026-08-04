@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
 	ArrowClockwise,
+	MagnifyingGlass,
 	PaperPlaneTilt,
 	Prohibit,
-	SmileySad,
 	Sparkle,
 	UserPlus,
 	Users,
 	WarningCircle,
+	X,
 } from "@phosphor-icons/react";
-import { Button, Card, EmptyState, Modal, Skeleton, useToast } from "../../components/ui";
+import { Button, EmptyState, Modal, Skeleton, Tabs, useToast } from "../../components/ui";
 import api from "../../lib/api";
 import endpoints from "../../lib/endpoints";
 import { useAuth } from "../../lib/auth";
@@ -37,6 +37,14 @@ const TABS = [
 	{ key: "suggested", label: "Gợi ý", icon: Sparkle, countKey: null },
 	{ key: "blocked", label: "Đã chặn", icon: Prohibit, countKey: "blockedUsersCount" },
 ];
+
+const TAB_TITLE = {
+	friends: "Bạn bè",
+	received: "Lời mời kết bạn",
+	sent: "Lời mời đã gửi",
+	suggested: "Gợi ý cho bạn",
+	blocked: "Đã chặn",
+};
 
 // The person on the "other end" of a relationship row. Blocks track blockedId;
 // friendships/requests store the pair as (userId, friendId) so we pick whichever
@@ -79,6 +87,7 @@ export default function FriendsPage() {
 	const [dataByTab, setDataByTab] = useState({}); // key -> { status, items, error }
 	const [confirmRemove, setConfirmRemove] = useState(null); // friends item pending confirm
 	const [removing, setRemoving] = useState(false);
+	const [query, setQuery] = useState("");
 
 	// Load one tab's list (+ profile enrichment for id-only responses).
 	const loadTab = useCallback(
@@ -248,62 +257,64 @@ export default function FriendsPage() {
 
 	const current = dataByTab[activeTab] ?? { status: "loading", items: [] };
 
-	return (
-		<div className="mx-auto max-w-5xl px-4 py-6">
-			<header className="mb-6">
-				<h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-					Bạn bè
-				</h1>
-				<p className="mt-1 text-sm text-zinc-500">
-					Quản lý bạn bè, lời mời và những người bạn đã chặn.
-				</p>
-			</header>
+	// Client-side filter over the already-loaded tab; no extra network call.
+	const visibleItems = useMemo(() => {
+		const q = query.trim().toLowerCase();
+		if (!q) return current.items;
+		return current.items.filter((item) => {
+			const p = item.profile;
+			const haystack = `${p?.username ?? ""} ${displayName(p)}`.toLowerCase();
+			return haystack.includes(q);
+		});
+	}, [current.items, query]);
 
-			{/* Tab bar */}
-			<div className="mb-6 flex gap-1 overflow-x-auto pb-1">
-				{TABS.map((tab) => {
-					const active = tab.key === activeTab;
-					const Icon = tab.icon;
+	return (
+		<div className="mx-auto max-w-[935px] px-4 pt-4 md:pt-[30px]">
+			{/* Search box */}
+			<div className="flex h-10 items-center gap-3 rounded-lg bg-fill px-4">
+				<MagnifyingGlass size={16} className="shrink-0 text-muted" />
+				<input
+					type="text"
+					value={query}
+					onChange={(e) => setQuery(e.target.value)}
+					placeholder="Tìm kiếm"
+					className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none"
+				/>
+				{query && (
+					<button
+						type="button"
+						onClick={() => setQuery("")}
+						aria-label="Xoá tìm kiếm"
+						className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-fill-strong text-canvas"
+					>
+						<X size={10} weight="bold" />
+					</button>
+				)}
+			</div>
+
+			{/* Same uppercase strip as profile and groups. Blue pills read as buttons,
+			    not as navigation, and Instagram never uses them for tabs. Counts ride
+			    inside the label so <Tabs> stays a plain {key,label,icon} contract. */}
+			<Tabs
+				className="mt-4"
+				value={activeTab}
+				onChange={setActiveTab}
+				items={TABS.map((tab) => {
 					const badge = badgeFor(tab);
-					return (
-						<button
-							key={tab.key}
-							type="button"
-							onClick={() => setActiveTab(tab.key)}
-							className={
-								"relative shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors " +
-								(active
-									? "text-brand-700 dark:text-brand-300"
-									: "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100")
-							}
-						>
-							{active && (
-								<motion.span
-									layoutId="friendsTabPill"
-									transition={{ type: "spring", stiffness: 360, damping: 30 }}
-									className="absolute inset-0 rounded-full bg-brand-50 dark:bg-brand-900/40"
-								/>
-							)}
-							<span className="relative z-10 flex items-center gap-1.5">
-								<Icon size={16} weight={active ? "fill" : "regular"} />
+					return {
+						key: tab.key,
+						icon: tab.icon,
+						label: (
+							<>
 								{tab.label}
 								{badge > 0 && (
-									<span
-										className={
-											"ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-xs " +
-											(active
-												? "bg-brand-600 text-white"
-												: "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300")
-										}
-									>
-										{badge}
-									</span>
+									<span className="ml-1 text-muted">{badge}</span>
 								)}
-							</span>
-						</button>
-					);
+							</>
+						),
+					};
 				})}
-			</div>
+			/>
 
 			{/* Panel: re-mounts per tab for a subtle enter transition */}
 			<motion.div
@@ -312,7 +323,9 @@ export default function FriendsPage() {
 				animate={{ opacity: 1, y: 0 }}
 				transition={{ duration: 0.2, ease: "easeOut" }}
 			>
-				{current.status === "loading" && <CardGridSkeleton />}
+				<h2 className="py-3 text-sm font-semibold text-muted">{TAB_TITLE[activeTab]}</h2>
+
+				{current.status === "loading" && <RowSkeletonList />}
 
 				{current.status === "error" && (
 					<EmptyState
@@ -321,7 +334,7 @@ export default function FriendsPage() {
 						description={current.error || "Đã có lỗi xảy ra khi tải danh sách."}
 						action={
 							<Button
-								variant="outline"
+								variant="secondary"
 								size="sm"
 								onClick={() => loadTab(activeTab)}
 							>
@@ -336,10 +349,18 @@ export default function FriendsPage() {
 					<EmptyForTab tab={activeTab} onExplore={() => setActiveTab("suggested")} />
 				)}
 
-				{current.status === "success" && current.items.length > 0 && (
-					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-						<AnimatePresence mode="popLayout">
-							{current.items.map((item) => (
+				{current.status === "success" && current.items.length > 0 && visibleItems.length === 0 && (
+					<EmptyState
+						icon={MagnifyingGlass}
+						title="Không tìm thấy kết quả"
+						description="Thử tìm kiếm với từ khoá khác."
+					/>
+				)}
+
+				{current.status === "success" && visibleItems.length > 0 && (
+					<div>
+						<AnimatePresence mode="popLayout" initial={false}>
+							{visibleItems.map((item) => (
 								<UserCard
 									key={item.id}
 									item={item}
@@ -366,18 +387,24 @@ export default function FriendsPage() {
 
 // --- Sub-pieces kept in-file (only used here) ---
 
-function CardGridSkeleton() {
+function RowSkeleton() {
 	return (
-		<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+		<div className="flex items-center gap-3 py-2">
+			<Skeleton className="h-11 w-11 shrink-0 rounded-full" />
+			<div className="min-w-0 flex-1 space-y-2">
+				<Skeleton className="h-3.5 w-32" />
+				<Skeleton className="h-3 w-20" />
+			</div>
+			<Skeleton className="h-7 w-20 shrink-0 rounded-lg" />
+		</div>
+	);
+}
+
+function RowSkeletonList() {
+	return (
+		<div>
 			{Array.from({ length: 6 }).map((_, i) => (
-				<Card key={i} className="flex flex-col items-center gap-4 p-4">
-					<Skeleton className="h-14 w-14 rounded-full" />
-					<div className="flex w-full flex-col items-center gap-1.5">
-						<Skeleton className="h-4 w-24" />
-						<Skeleton className="h-3 w-16" />
-					</div>
-					<Skeleton className="h-9 w-full rounded-xl" />
-				</Card>
+				<RowSkeleton key={i} />
 			))}
 		</div>
 	);
@@ -400,7 +427,7 @@ const EMPTY = {
 		description: "Những lời mời kết bạn bạn đã gửi sẽ xuất hiện ở đây.",
 	},
 	suggested: {
-		icon: SmileySad,
+		icon: Sparkle,
 		title: "Chưa có gợi ý",
 		description: "Kết bạn thêm để chúng tôi gợi ý những người bạn có thể biết.",
 	},
@@ -434,10 +461,10 @@ function ConfirmRemoveModal({ item, loading, onClose, onConfirm }) {
 	const name = item ? displayName(item.profile) : "";
 	return (
 		<Modal open={!!item} onClose={onClose} title="Huỷ kết bạn" size="sm">
-			<p className="text-sm text-zinc-600 dark:text-zinc-300">
+			<p className="text-sm text-muted">
 				Bạn có chắc muốn huỷ kết bạn với{" "}
-				<span className="font-semibold text-zinc-900 dark:text-zinc-100">{name}</span>? Hai
-				người sẽ không còn là bạn bè của nhau.
+				<span className="font-semibold text-ink">{name}</span>? Hai người sẽ không còn là bạn bè
+				của nhau.
 			</p>
 			<div className="mt-5 flex justify-end gap-2">
 				<Button variant="ghost" size="sm" onClick={onClose} disabled={loading}>
