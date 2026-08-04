@@ -1,5 +1,6 @@
 package com.tien.identityservice.service;
 
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import com.tien.identityservice.dto.ApiResponse;
@@ -40,6 +41,47 @@ public class ProfileService {
         } catch (FeignException e) {
             log.error("Lỗi khi gọi profile-service để tạo profile cho user: {}", request.getUserId(), e);
             throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION);
+        }
+    }
+
+    /**
+     * Tạo profile ở luồng nền, có thử lại.
+     *
+     * <p>Dùng cho seed lúc khởi động: run-all.sh đợi identity-service lên hẳn rồi mới khởi động
+     * profile-service, nên lần gọi đầu gần như chắc chắn thất bại vì chưa có ai nghe ở cổng 8082.
+     * Chạy @Async để không chặn startup, và thử lại cho tới khi profile-service sẵn sàng.
+     * createProfile phía profile-service là idempotent nên thử lại nhiều lần là an toàn.
+     */
+    @Async
+    public void createProfileWithRetry(ProfileCreationRequest request, int maxAttempts, long delayMillis) {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                createProfile(request);
+                log.info("Đã tạo/xác nhận profile cho userId {} ở lần thử {}.", request.getUserId(), attempt);
+                return;
+            } catch (Exception e) {
+                if (attempt == maxAttempts) {
+                    log.error(
+                            "Bỏ cuộc sau {} lần thử tạo profile cho userId {}. Tài khoản vẫn đăng nhập được nhưng trang cá nhân sẽ báo không tồn tại.",
+                            maxAttempts,
+                            request.getUserId(),
+                            e);
+                    return;
+                }
+                log.warn(
+                        "Lần thử {}/{} tạo profile cho userId {} thất bại ({}). Thử lại sau {}ms.",
+                        attempt,
+                        maxAttempts,
+                        request.getUserId(),
+                        e.getMessage(),
+                        delayMillis);
+                try {
+                    Thread.sleep(delayMillis);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
         }
     }
 
