@@ -228,63 +228,61 @@ export default function ChatPage() {
 	const onBack = useCallback(() => navigate("/messages"), [navigate]);
 
 	return (
-		<div className="mx-auto h-[calc(100dvh-11.5rem)] w-full max-w-6xl overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 lg:h-[calc(100dvh-8rem)]">
-			<div className="flex h-full">
-				{/* Left: conversation list */}
-				<div
-					className={cn(
-						"h-full w-full shrink-0 border-zinc-200 dark:border-zinc-800 lg:w-80 lg:border-r xl:w-96",
-						conversationId ? "hidden lg:block" : "block",
-					)}
-				>
-					<ConversationList
-						conversations={conversations}
-						activeId={conversationId}
-						loading={convLoading}
-						error={convError}
-						currentUserId={userId}
-						onSelect={onSelect}
-						onRetry={reloadConversations}
-					/>
-				</div>
+		<div className="flex h-[calc(100dvh-60px)] bg-surface md:h-[100dvh]">
+			{/* Left: conversation list */}
+			<div
+				className={cn(
+					"h-full w-full shrink-0 border-r border-line md:w-[350px]",
+					conversationId ? "hidden md:flex md:flex-col" : "flex flex-col",
+				)}
+			>
+				<ConversationList
+					conversations={conversations}
+					activeId={conversationId}
+					loading={convLoading}
+					error={convError}
+					currentUserId={userId}
+					onSelect={onSelect}
+					onRetry={reloadConversations}
+				/>
+			</div>
 
-				{/* Right: chat thread */}
-				<div
-					className={cn(
-						"h-full min-w-0 flex-1",
-						conversationId ? "block" : "hidden lg:block",
-					)}
-				>
-					{conversationId ? (
-						<ChatWindow
-							conversation={activeConv}
-							conversationId={conversationId}
-							messages={messages}
-							loading={msgLoading}
-							error={msgError}
-							connected={connected}
-							currentUserId={userId}
-							onSend={handleSend}
-							onBack={onBack}
-							onRetry={() =>
-								loadMessages(conversationId)
-									.then((asc) => {
-										setMsgError(null);
-										setMessages(asc);
-									})
-									.catch((e) => setMsgError(e.message))
-							}
-						/>
-					) : (
-						<div className="flex h-full items-center justify-center">
-							<EmptyState
-								icon={ChatsCircle}
-								title="Tin nhắn của bạn"
-								description="Chọn một cuộc trò chuyện ở bên trái để bắt đầu nhắn tin."
-							/>
-						</div>
-					)}
-				</div>
+			{/* Right: chat thread */}
+			<div
+				className={cn(
+					"h-full min-w-0",
+					conversationId
+						? "flex flex-1 flex-col"
+						: "hidden flex-1 flex-col items-center justify-center md:flex",
+				)}
+			>
+				{conversationId ? (
+					<ChatWindow
+						conversation={activeConv}
+						conversationId={conversationId}
+						messages={messages}
+						loading={msgLoading}
+						error={msgError}
+						connected={connected}
+						currentUserId={userId}
+						onSend={handleSend}
+						onBack={onBack}
+						onRetry={() =>
+							loadMessages(conversationId)
+								.then((asc) => {
+									setMsgError(null);
+									setMessages(asc);
+								})
+								.catch((e) => setMsgError(e.message))
+						}
+					/>
+				) : (
+					<EmptyState
+						icon={ChatsCircle}
+						title="Tin nhắn của bạn"
+						description="Chọn một cuộc trò chuyện ở bên trái để bắt đầu nhắn tin."
+					/>
+				)}
 			</div>
 		</div>
 	);
