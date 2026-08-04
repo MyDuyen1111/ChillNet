@@ -1,33 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Note } from "@phosphor-icons/react";
-import { Button, Card, EmptyState, Skeleton, useToast } from "../../../components/ui";
+import { Camera } from "@phosphor-icons/react";
+import { Button, EmptyState, Skeleton, useToast } from "../../../components/ui";
 import api from "../../../lib/api";
 import endpoints from "../../../lib/endpoints";
 import ProfilePostCard from "./ProfilePostCard";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 12;
 
-function PostSkeleton() {
+function GridSkeleton() {
 	return (
-		<Card className="p-4">
-			<div className="flex items-center gap-3">
-				<Skeleton className="h-10 w-10 rounded-full" />
-				<div className="flex-1 space-y-2">
-					<Skeleton className="h-3.5 w-32" />
-					<Skeleton className="h-3 w-20" />
-				</div>
-			</div>
-			<div className="mt-4 space-y-2">
-				<Skeleton className="h-3.5 w-full" />
-				<Skeleton className="h-3.5 w-4/5" />
-			</div>
-			<Skeleton className="mt-4 h-40 w-full rounded-xl" />
-		</Card>
+		<div className="grid grid-cols-3 gap-1">
+			{Array.from({ length: 9 }).map((_, i) => (
+				<Skeleton key={i} className="aspect-square rounded-none" />
+			))}
+		</div>
 	);
 }
 
-// Paginated list of a user's posts. `emptyLabel` differs for self vs others.
-export default function PostsTab({ userId, authorName, authorAvatar, isSelf }) {
+// Paginated grid of a user's posts. `emptyLabel` differs for self vs others.
+// `onCountChange` reports the total post count up to ProfileHeader so it can
+// show it in the "bài viết" stat, without a second fetch.
+export default function PostsTab({ userId, isSelf, onCountChange }) {
 	const toast = useToast();
 	const [posts, setPosts] = useState([]);
 	const [page, setPage] = useState(1);
@@ -52,6 +45,7 @@ export default function PostsTab({ userId, authorName, authorAvatar, isSelf }) {
 				setTotalPages(res?.totalPages ?? 1);
 				setPage(nextPage);
 				setPosts((prev) => (first ? content : [...prev, ...content]));
+				if (first) onCountChange?.(res?.totalElements ?? content.length);
 			} catch (err) {
 				if (id !== reqId.current) return;
 				setError(true);
@@ -63,7 +57,7 @@ export default function PostsTab({ userId, authorName, authorAvatar, isSelf }) {
 				}
 			}
 		},
-		[userId, toast],
+		[userId, toast, onCountChange],
 	);
 
 	useEffect(() => {
@@ -73,22 +67,17 @@ export default function PostsTab({ userId, authorName, authorAvatar, isSelf }) {
 	}, [load]);
 
 	if (loading) {
-		return (
-			<div className="space-y-4">
-				<PostSkeleton />
-				<PostSkeleton />
-			</div>
-		);
+		return <GridSkeleton />;
 	}
 
 	if (error && posts.length === 0) {
 		return (
 			<EmptyState
-				icon={Note}
+				icon={Camera}
 				title="Không tải được bài viết"
 				description="Đã có lỗi xảy ra khi tải bài viết. Thử lại nhé."
 				action={
-					<Button variant="outline" size="sm" onClick={() => load(1)}>
+					<Button variant="secondary" size="sm" onClick={() => load(1)}>
 						Thử lại
 					</Button>
 				}
@@ -99,11 +88,11 @@ export default function PostsTab({ userId, authorName, authorAvatar, isSelf }) {
 	if (posts.length === 0) {
 		return (
 			<EmptyState
-				icon={Note}
-				title={isSelf ? "Bạn chưa có bài viết nào" : "Chưa có bài viết"}
+				icon={Camera}
+				title="Chia sẻ ảnh"
 				description={
 					isSelf
-						? "Hãy chia sẻ khoảnh khắc đầu tiên của bạn với mọi người."
+						? "Khi bạn chia sẻ ảnh, chúng sẽ xuất hiện ở đây trên trang cá nhân của bạn."
 						: "Người dùng này chưa đăng bài viết nào."
 				}
 			/>
@@ -112,14 +101,11 @@ export default function PostsTab({ userId, authorName, authorAvatar, isSelf }) {
 
 	return (
 		<div className="space-y-4">
-			{posts.map((post) => (
-				<ProfilePostCard
-					key={post.id}
-					post={post}
-					authorName={authorName}
-					authorAvatar={authorAvatar}
-				/>
-			))}
+			<div className="grid grid-cols-3 gap-1">
+				{posts.map((post) => (
+					<ProfilePostCard key={post.id} post={post} />
+				))}
+			</div>
 			{page < totalPages && (
 				<div className="flex justify-center pt-1">
 					<Button
