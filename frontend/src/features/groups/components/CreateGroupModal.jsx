@@ -1,27 +1,30 @@
 import { useRef, useState } from "react";
-import { Camera, ImageSquare, Check } from "@phosphor-icons/react";
-import { Modal, Input, Textarea, Button, Avatar } from "../../../components/ui";
+import { ImageSquare, Check } from "@phosphor-icons/react";
+import { Modal, Input, Textarea, Button } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { PRIVACY_OPTIONS, privacyMeta } from "../groupUtils";
 
-// Modal tạo nhóm. Backend tạo nhóm bằng JSON, ảnh avatar/cover upload riêng
-// (PUT multipart) sau khi có id, nên onCreate nhận cả file để trang xử lý tuần tự.
+// Modal tạo nhóm. Backend tạo nhóm bằng JSON, ảnh bìa upload riêng (PUT
+// multipart) sau khi có id, nên onCreate nhận cả file để trang xử lý tuần tự.
 export default function CreateGroupModal({ open, onClose, onCreate, submitting }) {
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
 	const [privacy, setPrivacy] = useState("PUBLIC");
 	const [requiresApproval, setRequiresApproval] = useState(false);
 	const [cover, setCover] = useState(null); // { file, url }
-	const [avatar, setAvatar] = useState(null);
+	const [avatar, setAvatar] = useState(null); // { file, url }
 	const [error, setError] = useState("");
 	const coverInput = useRef(null);
 	const avatarInput = useRef(null);
 
-	function pickImage(e, current, setter) {
-		const file = e.target.files?.[0];
-		if (!file) return;
-		if (current?.url) URL.revokeObjectURL(current.url);
-		setter({ file, url: URL.createObjectURL(file) });
+	// Một handler cho cả hai ô ảnh; luôn thu hồi object URL cũ để không rò bộ nhớ.
+	function pickImage(setter, current) {
+		return (e) => {
+			const file = e.target.files?.[0];
+			if (!file) return;
+			if (current?.url) URL.revokeObjectURL(current.url);
+			setter({ file, url: URL.createObjectURL(file) });
+		};
 	}
 
 	function reset() {
@@ -65,78 +68,67 @@ export default function CreateGroupModal({ open, onClose, onCreate, submitting }
 		}
 	}
 
-	const privacyHint = privacyMeta(privacy).hint;
-
 	return (
 		<Modal open={open} onClose={handleClose} title="Tạo nhóm mới" size="lg">
 			<form onSubmit={submit} className="space-y-5">
-				{/* Ảnh bìa + avatar với preview */}
-				<div className="relative">
+				{/* Ảnh đại diện chồng lên góc ảnh bìa, đúng thứ tự người dùng sẽ thấy lại
+				    ở đầu trang nhóm. Hai nút phải là anh em, không lồng nhau. */}
+				<div className="relative mb-10">
 					<button
 						type="button"
 						onClick={() => coverInput.current?.click()}
-						className="group relative block h-28 w-full overflow-hidden rounded-xl border border-dashed border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/50"
+						className="relative block aspect-video w-full overflow-hidden rounded-lg bg-fill"
 					>
 						{cover ? (
 							<img src={cover.url} alt="" className="h-full w-full object-cover" />
 						) : (
-							<span className="flex h-full flex-col items-center justify-center gap-1 text-zinc-400">
-								<ImageSquare size={22} />
-								<span className="text-xs font-medium">Thêm ảnh bìa</span>
+							<span className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-muted">
+								<span className="flex h-11 w-11 items-center justify-center rounded-full border border-line">
+									<ImageSquare size={20} />
+								</span>
+								<span className="text-xs font-semibold">Thêm ảnh bìa</span>
 							</span>
 						)}
-						<span className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-zinc-950/60 px-2 py-1 text-[11px] font-medium text-white opacity-0 backdrop-blur transition-opacity group-hover:opacity-100">
-							<Camera size={12} weight="bold" /> Đổi
-						</span>
 					</button>
-
 					<button
 						type="button"
 						onClick={() => avatarInput.current?.click()}
-						className="absolute -bottom-5 left-4 rounded-full"
 						aria-label="Thêm ảnh đại diện nhóm"
+						className="absolute -bottom-8 left-4 h-[72px] w-[72px] overflow-hidden rounded-full border-4 border-surface bg-fill-strong"
 					>
-						<span className="relative block">
-							<Avatar
-								src={avatar?.url}
-								name={name || "Nhóm"}
-								size="lg"
-								ring
-								className="border border-white dark:border-zinc-900"
-							/>
-							<span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-white ring-2 ring-white dark:ring-zinc-900">
-								<Camera size={12} weight="bold" />
+						{avatar ? (
+							<img src={avatar.url} alt="" className="h-full w-full object-cover" />
+						) : (
+							<span className="flex h-full w-full items-center justify-center text-muted">
+								<ImageSquare size={20} />
 							</span>
-						</span>
+						)}
 					</button>
-
-					<input
-						ref={coverInput}
-						type="file"
-						accept="image/*"
-						hidden
-						onChange={(e) => pickImage(e, cover, setCover)}
-					/>
-					<input
-						ref={avatarInput}
-						type="file"
-						accept="image/*"
-						hidden
-						onChange={(e) => pickImage(e, avatar, setAvatar)}
-					/>
 				</div>
+				<input
+					ref={coverInput}
+					type="file"
+					accept="image/*"
+					hidden
+					onChange={pickImage(setCover, cover)}
+				/>
+				<input
+					ref={avatarInput}
+					type="file"
+					accept="image/*"
+					hidden
+					onChange={pickImage(setAvatar, avatar)}
+				/>
 
-				<div className="pt-4">
-					<Input
-						label="Tên nhóm"
-						placeholder="Vd: Hội yêu nhạc indie"
-						value={name}
-						onChange={(e) => setName(e.target.value)}
-						error={error}
-						maxLength={100}
-						autoFocus
-					/>
-				</div>
+				<Input
+					label="Tên nhóm"
+					placeholder="Vd: Hội yêu nhạc indie"
+					value={name}
+					onChange={(e) => setName(e.target.value)}
+					error={error}
+					maxLength={100}
+					autoFocus
+				/>
 
 				<Textarea
 					label="Mô tả"
@@ -148,9 +140,7 @@ export default function CreateGroupModal({ open, onClose, onCreate, submitting }
 				/>
 
 				<div className="space-y-2">
-					<span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-						Quyền riêng tư
-					</span>
+					<span className="text-sm font-semibold text-ink">Quyền riêng tư</span>
 					<div className="grid grid-cols-3 gap-2">
 						{PRIVACY_OPTIONS.map((p) => {
 							const meta = privacyMeta(p);
@@ -163,10 +153,10 @@ export default function CreateGroupModal({ open, onClose, onCreate, submitting }
 									onClick={() => setPrivacy(p)}
 									aria-pressed={active}
 									className={cn(
-										"flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-colors",
+										"flex flex-col items-center gap-1.5 rounded-lg border p-3 text-center transition-colors",
 										active
-											? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300"
-											: "border-zinc-200 text-zinc-600 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-600",
+											? "border-ink bg-hover text-ink"
+											: "border-line text-muted hover:border-muted hover:text-ink",
 									)}
 								>
 									<Icon size={20} weight={active ? "fill" : "regular"} />
@@ -175,42 +165,33 @@ export default function CreateGroupModal({ open, onClose, onCreate, submitting }
 							);
 						})}
 					</div>
-					<p className="text-xs text-zinc-500">{privacyHint}</p>
+					<p className="text-xs text-muted">{privacyMeta(privacy).hint}</p>
 				</div>
 
 				<button
 					type="button"
 					onClick={() => setRequiresApproval((v) => !v)}
-					className="flex w-full items-center gap-3 rounded-xl border border-zinc-200 p-3 text-left transition-colors hover:border-zinc-300 dark:border-zinc-700 dark:hover:border-zinc-600"
+					className="flex w-full items-center justify-between border-t border-line py-3 text-left"
 				>
-					<span
-						className={cn(
-							"flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
-							requiresApproval
-								? "border-brand-600 bg-brand-600 text-white"
-								: "border-zinc-300 dark:border-zinc-600",
-						)}
-					>
-						{requiresApproval && <Check size={13} weight="bold" />}
-					</span>
 					<span className="min-w-0">
-						<span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">
-							Cần phê duyệt thành viên
-						</span>
-						<span className="block text-xs text-zinc-500">
+						<span className="block text-sm font-medium text-ink">Cần phê duyệt thành viên</span>
+						<span className="block text-xs text-muted">
 							Người mới phải được quản trị viên duyệt trước khi tham gia.
 						</span>
 					</span>
+					<span
+						className={cn(
+							"flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+							requiresApproval ? "border-accent bg-accent text-white" : "border-line",
+						)}
+					>
+						{requiresApproval && <Check size={12} weight="bold" />}
+					</span>
 				</button>
 
-				<div className="flex justify-end gap-2 pt-1">
-					<Button type="button" variant="ghost" onClick={handleClose} disabled={submitting}>
-						Huỷ
-					</Button>
-					<Button type="submit" variant="primary" loading={submitting}>
-						Tạo nhóm
-					</Button>
-				</div>
+				<Button type="submit" variant="primary" size="lg" loading={submitting} className="w-full">
+					Tạo nhóm
+				</Button>
 			</form>
 		</Modal>
 	);
