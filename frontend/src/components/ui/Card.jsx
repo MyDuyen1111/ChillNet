@@ -1,12 +1,24 @@
 import { cn } from "../../lib/cn";
 
-// Neutral surface. Use only when elevation communicates real grouping; otherwise
-// separate with spacing or a divide-y.
-export default function Card({ className, children, as: Tag = "div", ...props }) {
+/**
+ * Instagram surface: flat white (black in dark), one hairline border, small
+ * radius, never a shadow. `flush` drops the border and radius below `sm` so
+ * feed posts run edge-to-edge on phones, exactly like the real app.
+ */
+export default function Card({
+	className,
+	children,
+	flush = false,
+	as: Tag = "div",
+	...props
+}) {
 	return (
 		<Tag
 			className={cn(
-				"rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900",
+				"bg-surface",
+				flush
+					? "border-y border-line sm:rounded-lg sm:border-x"
+					: "rounded-lg border border-line",
 				className,
 			)}
 			{...props}
