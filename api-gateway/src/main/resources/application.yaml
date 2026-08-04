@@ -85,6 +85,13 @@ spring:
                 - Path=${app.api-prefix}/group/**
               filters:
                 - StripPrefix=2
+            # ========== AI ==========
+            - id: ai_service
+              uri: http://localhost:8090
+              predicates:
+                - Path=${app.api-prefix}/ai/**
+              filters:
+                - StripPrefix=2
 
 management:
   endpoints:

@@ -132,6 +132,13 @@ export const endpoints = {
 	file: {
 		uploadFormData: svc("file", "/images/upload-form-data"),
 	},
+
+	// ---- ai-service (content moderation) ----
+	// Server-side moderation already runs on post/comment create and rejects with a
+	// CONTENT_VIOLATION message. This endpoint lets the composer pre-check a draft.
+	ai: {
+		moderate: svc("ai", "/moderations/check"),
+	},
 };
 
 export default endpoints;

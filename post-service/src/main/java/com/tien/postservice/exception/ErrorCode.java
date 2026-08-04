@@ -20,6 +20,7 @@ public enum ErrorCode {
     FILE_TOO_LARGE(1014, "File quá lớn. Vui lòng chọn file nhỏ hơn", HttpStatus.BAD_REQUEST),
     MAX_FILE_SIZE_EXCEEDED(1015, "Kích thước file vượt quá giới hạn cho phép", HttpStatus.BAD_REQUEST),
     MAX_REQUEST_SIZE_EXCEEDED(1016, "Kích thước request vượt quá giới hạn cho phép", HttpStatus.BAD_REQUEST),
+    CONTENT_VIOLATION(1017, "Nội dung vi phạm tiêu chuẩn cộng đồng, vui lòng chỉnh sửa.", HttpStatus.BAD_REQUEST),
     ;
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {
