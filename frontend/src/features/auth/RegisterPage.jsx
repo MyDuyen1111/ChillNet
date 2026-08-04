@@ -47,67 +47,85 @@ export default function RegisterPage() {
 	};
 
 	return (
-		<AuthLayout title="Tạo tài khoản" subtitle="Chỉ mất một phút để bắt đầu.">
-			<form onSubmit={onSubmit} className="space-y-4">
-				<div className="grid grid-cols-2 gap-3">
+		<AuthLayout
+			footer={
+				<>
+					Đã có tài khoản?{" "}
+					<Link to="/login" className="font-semibold text-accent">
+						Đăng nhập
+					</Link>
+				</>
+			}
+		>
+			<p className="mb-4 text-center text-base font-semibold text-muted">
+				Đăng ký để xem ảnh và video từ bạn bè.
+			</p>
+			<form onSubmit={onSubmit} className="flex flex-col gap-1.5">
+				<div className="grid grid-cols-2 gap-1.5">
 					<Input
-						label="Họ"
 						name="firstName"
 						value={form.firstName}
 						onChange={onChange}
-						placeholder="Nguyễn"
+						placeholder="Họ"
 						autoComplete="given-name"
+						className="bg-canvas"
 					/>
 					<Input
-						label="Tên"
 						name="lastName"
 						value={form.lastName}
 						onChange={onChange}
-						placeholder="An"
+						placeholder="Tên"
 						autoComplete="family-name"
+						className="bg-canvas"
 					/>
 				</div>
 				<Input
-					label="Tên đăng nhập"
 					name="username"
 					value={form.username}
 					onChange={onChange}
-					placeholder="chillguy"
+					placeholder="Tên đăng nhập"
 					autoComplete="username"
+					className="bg-canvas"
 					error={errors.username}
 					required
 				/>
 				<Input
-					label="Email"
 					name="email"
 					type="email"
 					value={form.email}
 					onChange={onChange}
-					placeholder="ban@email.com"
+					placeholder="Email"
 					autoComplete="email"
+					className="bg-canvas"
 					error={errors.email}
 					required
 				/>
 				<Input
-					label="Mật khẩu"
 					name="password"
 					type="password"
 					value={form.password}
 					onChange={onChange}
-					placeholder="Tối thiểu 8 ký tự"
+					placeholder="Mật khẩu"
 					autoComplete="new-password"
+					className="bg-canvas"
 					error={errors.password || errors.form}
 					required
 				/>
-				<Button type="submit" size="lg" loading={loading} className="w-full">
+				<Button
+					type="submit"
+					variant="primary"
+					size="md"
+					loading={loading}
+					className="mt-3 w-full"
+				>
 					Đăng ký
 				</Button>
 			</form>
-			<p className="mt-6 text-center text-sm text-zinc-500">
-				Đã có tài khoản?{" "}
-				<Link to="/login" className="font-semibold text-brand-600 hover:text-brand-500">
-					Đăng nhập
-				</Link>
+			<p className="mt-4 text-center text-xs leading-4 text-muted">
+				Bằng việc đăng ký, bạn đồng ý với{" "}
+				<span className="font-semibold text-muted">Điều khoản</span>,{" "}
+				<span className="font-semibold text-muted">Chính sách quyền riêng tư</span> và{" "}
+				<span className="font-semibold text-muted">Chính sách cookie</span> của chúng tôi.
 			</p>
 		</AuthLayout>
 	);
