@@ -1,16 +1,13 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import {
 	BookmarkSimple,
 	ChatCircle,
-	DotsThreeVertical,
-	Globe,
+	DotsThree,
 	Heart,
-	Lock,
-	ShareNetwork,
+	PaperPlaneTilt,
 	Trash,
-	UsersThree,
 } from "@phosphor-icons/react";
 import { Avatar, Button, Card, IconButton, Modal, useToast } from "../../../components/ui";
 import api from "../../../lib/api";
@@ -18,19 +15,15 @@ import endpoints from "../../../lib/endpoints";
 import { useAuth } from "../../../lib/auth";
 import { timeAgo } from "../../../lib/format";
 import { cn } from "../../../lib/cn";
+import { useComments } from "../hooks/useComments";
 import PostImageGrid from "./PostImageGrid";
 import ImageLightbox from "./ImageLightbox";
 import CommentSection from "./CommentSection";
 
-const privacyMeta = {
-	PUBLIC: { Icon: Globe, label: "Công khai" },
-	FRIENDS: { Icon: UsersThree, label: "Bạn bè" },
-	PRIVATE: { Icon: Lock, label: "Chỉ mình tôi" },
-};
-
-// A single feed post: author, content, media, and the like / comment / save bar.
-// Optimistic toggles roll back on failure. `detail` opens comments by default.
-export default function PostCard({ post, onDeleted, detail = false }) {
+// Shared like / save / delete state + handlers. `commentCount` lives here too
+// (rather than in `useComments`) because the feed card never fetches the
+// thread, it only shows a number and a link into the detail page.
+function usePostActions(post, onDeleted) {
 	const { userId } = useAuth();
 	const toast = useToast();
 
@@ -38,16 +31,12 @@ export default function PostCard({ post, onDeleted, detail = false }) {
 	const [likeCount, setLikeCount] = useState(post.likeCount ?? 0);
 	const [saved, setSaved] = useState(Boolean(post.isSaved));
 	const [commentCount, setCommentCount] = useState(post.commentCount ?? 0);
-
-	const [showComments, setShowComments] = useState(detail);
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [confirmOpen, setConfirmOpen] = useState(false);
 	const [deleting, setDeleting] = useState(false);
 	const [lightbox, setLightbox] = useState(-1);
 
 	const isOwner = post.isOwnerPost ?? (post.userId != null && post.userId === userId);
-	const images = post.imageUrls ?? [];
-	const privacy = privacyMeta[post.privacy] || privacyMeta.PUBLIC;
 
 	const toggleLike = async () => {
 		const next = !liked;
@@ -69,12 +58,13 @@ export default function PostCard({ post, onDeleted, detail = false }) {
 		try {
 			if (next) await api.post(endpoints.post.save(post.id));
 			else await api.delete(endpoints.post.unsave(post.id));
-			toast.success(next ? "Đã lưu bài viết." : "Đã bỏ lưu.");
 		} catch (err) {
 			setSaved(!next);
 			toast.error(err?.message || "Không thực hiện được, thử lại.");
 		}
 	};
+
+	const share = () => toast("Tính năng chia sẻ đang được phát triển.");
 
 	const doDelete = async () => {
 		setDeleting(true);
@@ -89,186 +79,438 @@ export default function PostCard({ post, onDeleted, detail = false }) {
 		}
 	};
 
+	const bumpCommentCount = (delta) => setCommentCount((c) => Math.max(0, c + delta));
+
+	return {
+		liked,
+		likeCount,
+		saved,
+		commentCount,
+		isOwner,
+		menuOpen,
+		setMenuOpen,
+		confirmOpen,
+		setConfirmOpen,
+		deleting,
+		lightbox,
+		setLightbox,
+		toggleLike,
+		toggleSave,
+		share,
+		doDelete,
+		bumpCommentCount,
+	};
+}
+
+// Kebab menu, only rendered for the post's owner.
+function OwnerMenu({ menuOpen, setMenuOpen, onDeleteClick }) {
 	return (
-		<Card className="overflow-hidden">
-			{/* Header */}
-			<div className="flex items-start gap-3 p-4 pb-3">
+		<div className="relative shrink-0">
+			<IconButton label="Tuỳ chọn bài viết" onClick={() => setMenuOpen((v) => !v)}>
+				<DotsThree size={20} weight="bold" />
+			</IconButton>
+			<AnimatePresence>
+				{menuOpen && (
+					<>
+						<div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+						<motion.div
+							initial={{ opacity: 0, scale: 0.95, y: -4 }}
+							animate={{ opacity: 1, scale: 1, y: 0 }}
+							exit={{ opacity: 0, scale: 0.95, y: -4 }}
+							transition={{ duration: 0.12 }}
+							className="absolute right-0 top-9 z-20 w-44 overflow-hidden rounded-xl bg-surface py-1 shadow-[0_4px_12px_rgba(0,0,0,0.15)] ring-1 ring-line"
+						>
+							<button
+								type="button"
+								onClick={() => {
+									setMenuOpen(false);
+									onDeleteClick();
+								}}
+								className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-like transition-opacity hover:opacity-70"
+							>
+								<Trash size={16} />
+								Xoá bài viết
+							</button>
+						</motion.div>
+					</>
+				)}
+			</AnimatePresence>
+		</div>
+	);
+}
+
+function DeleteConfirmModal({ open, onClose, onConfirm, loading }) {
+	return (
+		<Modal open={open} onClose={() => !loading && onClose()} title="Xoá bài viết" size="sm">
+			<p className="text-sm text-muted">
+				Bạn có chắc muốn xoá bài viết này? Hành động này không thể hoàn tác.
+			</p>
+			<div className="mt-5 flex justify-end gap-2">
+				<Button variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+					Huỷ
+				</Button>
+				<Button variant="danger" size="sm" onClick={onConfirm} loading={loading}>
+					Xoá
+				</Button>
+			</div>
+		</Modal>
+	);
+}
+
+// Inline "username caption" text, Instagram style: truncates long captions
+// behind a "thêm" toggle instead of always showing the full text.
+function PostCaption({ userId, username, content }) {
+	const [expanded, setExpanded] = useState(false);
+	if (!content) return null;
+
+	const LIMIT = 140;
+	const isLong = content.length > LIMIT;
+	const shown = expanded || !isLong ? content : `${content.slice(0, LIMIT).trimEnd()}...`;
+
+	return (
+		<p className="whitespace-pre-wrap break-words text-sm text-ink">
+			<Link to={`/profile/${userId}`} className="font-semibold text-ink hover:text-muted">
+				{username || "Người dùng"}
+			</Link>{" "}
+			{shown}
+			{isLong && !expanded && (
+				<button
+					type="button"
+					onClick={() => setExpanded(true)}
+					className="ml-1 text-muted hover:text-ink"
+				>
+					thêm
+				</button>
+			)}
+		</p>
+	);
+}
+
+// Like / comment(slot) / share / save row. `commentSlot` differs between the
+// feed card (a link into the detail page) and the detail card (focuses the
+// add-comment box that already lives on screen).
+function ActionBar({ liked, saved, onToggleLike, onToggleSave, onShare, commentSlot }) {
+	return (
+		<div className="flex items-center gap-4 px-4 pt-3">
+			<button
+				type="button"
+				onClick={onToggleLike}
+				aria-label="Thích"
+				className="text-ink transition-opacity hover:opacity-60"
+			>
+				<Heart size={24} weight={liked ? "fill" : "regular"} className={cn(liked && "text-like")} />
+			</button>
+			{commentSlot}
+			<button
+				type="button"
+				onClick={onShare}
+				aria-label="Chia sẻ"
+				className="text-ink transition-opacity hover:opacity-60"
+			>
+				<PaperPlaneTilt size={24} />
+			</button>
+			<button
+				type="button"
+				onClick={onToggleSave}
+				aria-label="Lưu"
+				className="ml-auto text-ink transition-opacity hover:opacity-60"
+			>
+				<BookmarkSimple size={24} weight={saved ? "fill" : "regular"} />
+			</button>
+		</div>
+	);
+}
+
+// Bare "Thêm bình luận..." row: no border box, "Đăng" only appears once there
+// is text to send.
+function CommentComposer({ inputRef, value, onChange, onSubmit, sending, autoFocus = false }) {
+	return (
+		<div className="flex items-center gap-2 px-4 py-3">
+			<input
+				ref={inputRef}
+				value={value}
+				onChange={(e) => onChange(e.target.value)}
+				onKeyDown={(e) => {
+					if (e.key === "Enter" && !e.shiftKey) {
+						e.preventDefault();
+						onSubmit();
+					}
+				}}
+				placeholder="Thêm bình luận..."
+				aria-label="Thêm bình luận"
+				autoFocus={autoFocus}
+				className="h-6 w-full bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none"
+			/>
+			{value.trim() && (
+				<button
+					type="button"
+					onClick={onSubmit}
+					disabled={sending}
+					className="shrink-0 text-sm font-semibold text-accent disabled:opacity-40"
+				>
+					Đăng
+				</button>
+			)}
+		</div>
+	);
+}
+
+// Feed-card rendering: header, media carousel, action bar, like count, inline
+// caption, "xem tất cả N bình luận" (links to the detail page), quick composer.
+function FeedPostCard({ post, onDeleted }) {
+	const a = usePostActions(post, onDeleted);
+	const toast = useToast();
+	const images = post.imageUrls ?? [];
+
+	const [commentText, setCommentText] = useState("");
+	const [sending, setSending] = useState(false);
+
+	const submitComment = async () => {
+		const value = commentText.trim();
+		if (!value || sending) return;
+		setSending(true);
+		try {
+			await api.post(endpoints.interaction.comments, {
+				postId: post.id,
+				content: value,
+				parentCommentId: null,
+			});
+			setCommentText("");
+			a.bumpCommentCount(1);
+		} catch (err) {
+			toast.error(err?.message || "Không gửi được bình luận.");
+		} finally {
+			setSending(false);
+		}
+	};
+
+	return (
+		<Card flush>
+			<div className="flex items-center gap-3 p-3">
 				<Link to={`/profile/${post.userId}`} className="shrink-0">
-					<Avatar src={post.userAvatar} name={post.username} size="md" />
+					<Avatar src={post.userAvatar} name={post.username} size="sm" />
 				</Link>
-				<div className="min-w-0 flex-1">
+				<div className="flex min-w-0 flex-1 items-center gap-1.5">
 					<Link
 						to={`/profile/${post.userId}`}
-						className="block truncate font-semibold text-zinc-900 hover:underline dark:text-zinc-100"
+						className="truncate text-sm font-semibold text-ink hover:text-muted"
 					>
 						{post.username || "Người dùng"}
 					</Link>
+					<span className="text-xs text-muted" aria-hidden="true">
+						·
+					</span>
 					<Link
 						to={`/post/${post.id}`}
-						className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+						className="shrink-0 text-xs text-muted hover:text-ink"
 					>
-						<span className="font-mono">{timeAgo(post.createdDate || post.created)}</span>
-						<span aria-hidden="true">·</span>
-						<privacy.Icon size={12} />
-						<span>{privacy.label}</span>
+						{timeAgo(post.createdDate || post.created)}
 					</Link>
 				</div>
-
-				{isOwner && (
-					<div className="relative shrink-0">
-						<IconButton
-							label="Tuỳ chọn bài viết"
-							className="h-9 w-9"
-							onClick={() => setMenuOpen((v) => !v)}
-						>
-							<DotsThreeVertical size={20} weight="bold" />
-						</IconButton>
-						<AnimatePresence>
-							{menuOpen && (
-								<>
-									<div
-										className="fixed inset-0 z-10"
-										onClick={() => setMenuOpen(false)}
-									/>
-									<motion.div
-										initial={{ opacity: 0, scale: 0.95, y: -4 }}
-										animate={{ opacity: 1, scale: 1, y: 0 }}
-										exit={{ opacity: 0, scale: 0.95, y: -4 }}
-										transition={{ duration: 0.12 }}
-										className="absolute right-0 top-10 z-20 w-44 overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
-									>
-										<button
-											type="button"
-											onClick={() => {
-												setMenuOpen(false);
-												setConfirmOpen(true);
-											}}
-											className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 transition-colors hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
-										>
-											<Trash size={16} />
-											Xoá bài viết
-										</button>
-									</motion.div>
-								</>
-							)}
-						</AnimatePresence>
-					</div>
-				)}
-			</div>
-
-			{/* Content */}
-			{post.content && (
-				<div className="px-4 pb-3">
-					<p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-zinc-800 dark:text-zinc-200">
-						{post.content}
-					</p>
-				</div>
-			)}
-
-			{/* Media */}
-			{images.length > 0 && (
-				<div className="px-4 pb-3">
-					<PostImageGrid images={images} onOpen={setLightbox} />
-				</div>
-			)}
-
-			{/* Stat summary */}
-			{(likeCount > 0 || commentCount > 0) && (
-				<div className="flex items-center justify-between px-4 pb-2 text-xs text-zinc-500">
-					<span className="inline-flex items-center gap-1">
-						{likeCount > 0 && (
-							<>
-								<Heart size={13} weight="fill" className="text-rose-500" />
-								<span className="font-mono">{likeCount}</span>
-							</>
-						)}
-					</span>
-					{commentCount > 0 && (
-						<button
-							type="button"
-							onClick={() => setShowComments(true)}
-							className="hover:underline"
-						>
-							<span className="font-mono">{commentCount}</span> bình luận
-						</button>
-					)}
-				</div>
-			)}
-
-			{/* Action bar */}
-			<div className="flex items-center gap-1 border-t border-zinc-100 px-2 py-1.5 dark:border-zinc-800">
-				<ActionButton active={liked} activeClass="text-rose-500" onClick={toggleLike}>
-					<Heart size={19} weight={liked ? "fill" : "regular"} />
-					Thích
-				</ActionButton>
-				<ActionButton
-					active={showComments}
-					onClick={() => setShowComments((v) => !v)}
-				>
-					<ChatCircle size={19} weight={showComments ? "fill" : "regular"} />
-					Bình luận
-				</ActionButton>
-				<ActionButton active={saved} activeClass="text-brand-600 dark:text-brand-400" onClick={toggleSave}>
-					<BookmarkSimple size={19} weight={saved ? "fill" : "regular"} />
-					Lưu
-				</ActionButton>
-				{post.shareCount > 0 && (
-					<span className="ml-auto inline-flex items-center gap-1 px-2 text-xs text-zinc-400">
-						<ShareNetwork size={15} />
-						<span className="font-mono">{post.shareCount}</span>
-					</span>
-				)}
-			</div>
-
-			{/* Comments */}
-			<AnimatePresence initial={false}>
-				{showComments && (
-					<CommentSection
-						postId={post.id}
-						onCountChange={(delta) => setCommentCount((c) => Math.max(0, c + delta))}
+				{a.isOwner && (
+					<OwnerMenu
+						menuOpen={a.menuOpen}
+						setMenuOpen={a.setMenuOpen}
+						onDeleteClick={() => a.setConfirmOpen(true)}
 					/>
 				)}
-			</AnimatePresence>
+			</div>
 
-			{/* Lightbox */}
-			<ImageLightbox
-				images={images}
-				index={lightbox}
-				onClose={() => setLightbox(-1)}
-				onIndexChange={setLightbox}
+			{images.length > 0 && <PostImageGrid images={images} onOpen={a.setLightbox} />}
+
+			<ActionBar
+				liked={a.liked}
+				saved={a.saved}
+				onToggleLike={a.toggleLike}
+				onToggleSave={a.toggleSave}
+				onShare={a.share}
+				commentSlot={
+					<Link
+						to={`/post/${post.id}`}
+						aria-label="Bình luận"
+						className="text-ink transition-opacity hover:opacity-60"
+					>
+						<ChatCircle size={24} className="-scale-x-100" />
+					</Link>
+				}
 			/>
 
-			{/* Delete confirm */}
-			<Modal open={confirmOpen} onClose={() => !deleting && setConfirmOpen(false)} title="Xoá bài viết" size="sm">
-				<p className="text-sm text-zinc-600 dark:text-zinc-400">
-					Bạn có chắc muốn xoá bài viết này? Hành động này không thể hoàn tác.
-				</p>
-				<div className="mt-5 flex justify-end gap-2">
-					<Button variant="ghost" size="sm" onClick={() => setConfirmOpen(false)} disabled={deleting}>
-						Huỷ
-					</Button>
-					<Button variant="danger" size="sm" onClick={doDelete} loading={deleting}>
-						Xoá
-					</Button>
-				</div>
-			</Modal>
+			{a.likeCount > 0 && (
+				<p className="px-4 pt-2 text-sm font-semibold text-ink">{a.likeCount} lượt thích</p>
+			)}
+
+			<div className="px-4 pt-1">
+				<PostCaption userId={post.userId} username={post.username} content={post.content} />
+				{a.commentCount > 0 && (
+					<Link
+						to={`/post/${post.id}`}
+						className="mt-1 block text-sm text-muted hover:text-ink"
+					>
+						Xem tất cả {a.commentCount} bình luận
+					</Link>
+				)}
+			</div>
+
+			<div className="mt-1 border-t border-line">
+				<CommentComposer
+					value={commentText}
+					onChange={setCommentText}
+					onSubmit={submitComment}
+					sending={sending}
+				/>
+			</div>
+
+			<ImageLightbox
+				images={images}
+				index={a.lightbox}
+				onClose={() => a.setLightbox(-1)}
+				onIndexChange={a.setLightbox}
+			/>
+
+			<DeleteConfirmModal
+				open={a.confirmOpen}
+				onClose={() => a.setConfirmOpen(false)}
+				onConfirm={a.doDelete}
+				loading={a.deleting}
+			/>
 		</Card>
 	);
 }
 
-// Full-width action-bar item. Kept local so the three buttons stay identical.
-function ActionButton({ active, activeClass = "text-brand-600 dark:text-brand-400", onClick, children }) {
+// Detail-page rendering: two columns on `md+` (image left, thread right),
+// stacked on mobile. Mirrors Instagram's post-detail modal.
+function PostDetailCard({ post, onDeleted }) {
+	const a = usePostActions(post, onDeleted);
+	const toast = useToast();
+	const images = post.imageUrls ?? [];
+	const composerRef = useRef(null);
+
+	const { comments, status, hasNext, loadingMore, loadMore, addComment } = useComments(post.id);
+
+	const [commentText, setCommentText] = useState("");
+	const [sending, setSending] = useState(false);
+
+	const submitComment = async () => {
+		const value = commentText.trim();
+		if (!value || sending) return;
+		setSending(true);
+		try {
+			const created = await api.post(endpoints.interaction.comments, {
+				postId: post.id,
+				content: value,
+				parentCommentId: null,
+			});
+			addComment(created);
+			a.bumpCommentCount(1);
+			setCommentText("");
+		} catch (err) {
+			toast.error(err?.message || "Không gửi được bình luận.");
+		} finally {
+			setSending(false);
+		}
+	};
+
 	return (
-		<button
-			type="button"
-			onClick={onClick}
-			className={cn(
-				"flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-medium text-zinc-600 transition-colors",
-				"hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800",
-				active && activeClass,
+		<Card className="mx-auto flex w-full max-w-[935px] flex-col overflow-hidden md:h-[80vh] md:flex-row">
+			{images.length > 0 && (
+				<div className="aspect-square w-full shrink-0 bg-black md:aspect-auto md:h-full md:flex-1">
+					<PostImageGrid images={images} variant="detail" />
+				</div>
 			)}
-		>
-			{children}
-		</button>
+
+			<div className="flex min-h-0 w-full flex-1 flex-col md:w-[405px] md:flex-none md:border-l md:border-line">
+				<div className="flex items-center gap-3 border-b border-line p-3">
+					<Link to={`/profile/${post.userId}`} className="shrink-0">
+						<Avatar src={post.userAvatar} name={post.username} size="sm" />
+					</Link>
+					<Link
+						to={`/profile/${post.userId}`}
+						className="min-w-0 flex-1 truncate text-sm font-semibold text-ink hover:text-muted"
+					>
+						{post.username || "Người dùng"}
+					</Link>
+					{a.isOwner && (
+						<OwnerMenu
+							menuOpen={a.menuOpen}
+							setMenuOpen={a.setMenuOpen}
+							onDeleteClick={() => a.setConfirmOpen(true)}
+						/>
+					)}
+				</div>
+
+				<div className="flex-1 overflow-y-auto px-4 py-4">
+					{post.content && (
+						<div className="mb-4 flex items-start gap-3">
+							<Avatar src={post.userAvatar} name={post.username} size="sm" />
+							<PostCaption userId={post.userId} username={post.username} content={post.content} />
+						</div>
+					)}
+					<CommentSection
+						comments={comments}
+						status={status}
+						hasNext={hasNext}
+						loadingMore={loadingMore}
+						onLoadMore={loadMore}
+						postId={post.id}
+						onCountChange={a.bumpCommentCount}
+					/>
+				</div>
+
+				<div className="border-t border-line">
+					<ActionBar
+						liked={a.liked}
+						saved={a.saved}
+						onToggleLike={a.toggleLike}
+						onToggleSave={a.toggleSave}
+						onShare={a.share}
+						commentSlot={
+							<button
+								type="button"
+								onClick={() => composerRef.current?.focus()}
+								aria-label="Bình luận"
+								className="text-ink transition-opacity hover:opacity-60"
+							>
+								<ChatCircle size={24} className="-scale-x-100" />
+							</button>
+						}
+					/>
+
+					{a.likeCount > 0 && (
+						<p className="px-4 pt-2 text-sm font-semibold text-ink">{a.likeCount} lượt thích</p>
+					)}
+					<p className="px-4 pb-2 pt-1 text-[11px] uppercase tracking-wide text-faint">
+						{timeAgo(post.createdDate || post.created)}
+					</p>
+
+					<div className="border-t border-line-soft">
+						<CommentComposer
+							inputRef={composerRef}
+							value={commentText}
+							onChange={setCommentText}
+							onSubmit={submitComment}
+							sending={sending}
+						/>
+					</div>
+				</div>
+			</div>
+
+			<DeleteConfirmModal
+				open={a.confirmOpen}
+				onClose={() => a.setConfirmOpen(false)}
+				onConfirm={a.doDelete}
+				loading={a.deleting}
+			/>
+		</Card>
+	);
+}
+
+// A single feed post: author, media, and the like / comment / save bar.
+// `detail` switches to the two-column post-detail layout used by
+// `PostDetailPage`.
+export default function PostCard({ post, onDeleted, detail = false }) {
+	return detail ? (
+		<PostDetailCard post={post} onDeleted={onDeleted} />
+	) : (
+		<FeedPostCard post={post} onDeleted={onDeleted} />
 	);
 }

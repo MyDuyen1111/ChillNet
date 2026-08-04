@@ -29,16 +29,20 @@ export default function PostDetailPage() {
 	}, [load]);
 
 	return (
-		<div className="mx-auto w-full max-w-2xl px-4 py-6">
+		<div className="px-4 pt-4 md:pt-[30px]">
 			<Link
 				to="/feed"
-				className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+				className="mx-auto mb-4 flex max-w-[935px] items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink"
 			>
 				<ArrowLeft size={18} />
 				Về bảng tin
 			</Link>
 
-			{status === "loading" && <PostCardSkeleton />}
+			{status === "loading" && (
+				<div className="mx-auto max-w-[935px]">
+					<PostCardSkeleton />
+				</div>
+			)}
 
 			{status === "error" && (
 				<EmptyState

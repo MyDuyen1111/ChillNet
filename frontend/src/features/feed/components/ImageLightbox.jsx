@@ -35,7 +35,7 @@ export default function ImageLightbox({ images = [], index = 0, onClose, onIndex
 		<AnimatePresence>
 			{open && (
 				<motion.div
-					className="fixed inset-0 z-[70] flex items-center justify-center bg-zinc-950/90 p-4"
+					className="fixed inset-0 z-[70] flex items-center justify-center bg-black"
 					initial={reduce ? false : { opacity: 0 }}
 					animate={{ opacity: 1 }}
 					exit={{ opacity: 0 }}
@@ -45,9 +45,9 @@ export default function ImageLightbox({ images = [], index = 0, onClose, onIndex
 						type="button"
 						onClick={onClose}
 						aria-label="Đóng"
-						className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
+						className="absolute right-4 top-4 text-white transition-opacity hover:opacity-70"
 					>
-						<X size={22} />
+						<X size={26} />
 					</button>
 
 					{total > 1 && (
@@ -59,9 +59,9 @@ export default function ImageLightbox({ images = [], index = 0, onClose, onIndex
 									e.stopPropagation();
 									go(-1);
 								}}
-								className="absolute left-4 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
+								className="absolute left-4 text-white transition-opacity hover:opacity-70"
 							>
-								<CaretLeft size={24} />
+								<CaretLeft size={28} />
 							</button>
 							<button
 								type="button"
@@ -70,9 +70,9 @@ export default function ImageLightbox({ images = [], index = 0, onClose, onIndex
 									e.stopPropagation();
 									go(1);
 								}}
-								className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
+								className="absolute right-4 text-white transition-opacity hover:opacity-70"
 							>
-								<CaretRight size={24} />
+								<CaretRight size={28} />
 							</button>
 						</>
 					)}
@@ -85,11 +85,11 @@ export default function ImageLightbox({ images = [], index = 0, onClose, onIndex
 						initial={reduce ? false : { opacity: 0, scale: 0.97 }}
 						animate={{ opacity: 1, scale: 1 }}
 						transition={{ type: "spring", stiffness: 260, damping: 26 }}
-						className="max-h-[90vh] max-w-[92vw] rounded-xl object-contain shadow-2xl"
+						className="max-h-[90vh] max-w-[92vw] object-contain"
 					/>
 
 					{total > 1 && (
-						<span className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 font-mono text-xs text-white">
+						<span className="absolute bottom-5 left-1/2 -translate-x-1/2 text-xs text-white/80">
 							{index + 1} / {total}
 						</span>
 					)}
