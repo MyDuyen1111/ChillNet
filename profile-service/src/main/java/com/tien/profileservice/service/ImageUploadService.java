@@ -18,7 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Upload avatar/background: gọi đồng bộ sang file-service qua Feign
- * (file-service là service duy nhất giữ credential Cloudinary).
+ * (file-service là service duy nhất nói chuyện với object storage).
  */
 @Slf4j
 @Service

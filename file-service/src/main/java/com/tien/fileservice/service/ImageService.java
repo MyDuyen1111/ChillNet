@@ -1,19 +1,19 @@
 package com.tien.fileservice.service;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import javax.imageio.ImageIO;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.cloudinary.Cloudinary;
-import com.cloudinary.Transformation;
-import com.cloudinary.utils.ObjectUtils;
 import com.mongodb.lang.Nullable;
 import com.tien.fileservice.dto.response.UploadResponse;
 import com.tien.fileservice.entity.Image;
@@ -44,7 +44,7 @@ public class ImageService {
 
     private static final long MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB in bytes
 
-    Cloudinary cloudinary;
+    ObjectStorageService objectStorage;
 
     ImageRepository imageRepository;
 
@@ -83,7 +83,7 @@ public class ImageService {
             throw e;
         } catch (Exception e) {
             log.error("Upload multiple images failed", e);
-            throw new AppException(ErrorCode.CLOUDINARY_UPLOAD_FAILED);
+            throw new AppException(ErrorCode.STORAGE_UPLOAD_FAILED);
         }
 
         return new MultipleImageResponse(uploadedEvents);
@@ -126,61 +126,30 @@ public class ImageService {
             throw new AppException(ErrorCode.FILE_TOO_LARGE);
         }
 
-        final String folder = buildFolder(imageType, ownerId, postId);
-
-        Map<String, Object> options = ObjectUtils.asMap(
-                "folder",
-                folder,
-                "resource_type",
-                "image",
-                "unique_filename",
-                true, // tránh đụng public_id
-                "overwrite",
-                false, // không ghi đè ngẫu nhiên
-                "invalidate",
-                true, // xóa cache CDN khi cần (có ích nếu sau này overwrite)
-                "quality",
-                "auto",
-                "fetch_format",
-                "auto",
-                "use_filename",
-                false);
-
-        final Map<?, ?> uploadResult;
-        try {
-            uploadResult = cloudinary.uploader().upload(bytes, options);
-        } catch (Exception ex) {
-            throw new AppException(ErrorCode.CLOUDINARY_UPLOAD_FAILED);
+        // Luồng base64 không kèm content-type, phải tự đoán từ magic bytes.
+        String contentType = sniffContentType(bytes);
+        if (!ALLOWED_CONTENT_TYPES.contains(contentType)) {
+            throw new AppException(ErrorCode.FILE_TYPE_NOT_ALLOWED);
         }
 
-        String publicId = (String) uploadResult.get("public_id");
-        String url = (String) uploadResult.get("secure_url");
-        String format =
-                uploadResult.get("format") != null ? uploadResult.get("format").toString() : null;
-        Integer width = (Integer) uploadResult.get("width");
-        Integer height = (Integer) uploadResult.get("height");
-        String version = uploadResult.get("version") != null
-                ? uploadResult.get("version").toString()
-                : null;
+        final String folder = buildFolder(imageType, ownerId, postId);
+        var stored = objectStorage.store(bytes, contentType, folder, extensionOf(contentType));
 
-        // Determine content type from format
-        String contentType = format != null ? "image/" + format.toLowerCase() : "image/jpeg";
-        Long size = (long) bytes.length;
+        String format = formatOf(contentType);
+        int[] size = probeDimensions(bytes);
 
-        // Save to MongoDB
         Image image = Image.builder()
                 .ownerId(ownerId)
                 .postId(postId)
                 .contentType(contentType)
-                .size(size)
+                .size((long) bytes.length)
                 .imageType(imageType)
-                .secureUrl(url)
-                .publicId(publicId)
+                .secureUrl(stored.url())
+                .publicId(stored.key())
                 .format(format)
-                .width(width)
-                .height(height)
-                .imageVersions(generateImageVersions(publicId))
-                .version(version)
+                .width(size[0] > 0 ? size[0] : null)
+                .height(size[1] > 0 ? size[1] : null)
+                .imageVersions(generateImageVersions(stored.url()))
                 .build();
         image = imageRepository.save(image);
         log.info("Saved image to MongoDB with id: {}", image.getId());
@@ -188,7 +157,7 @@ public class ImageService {
         Map<String, Object> safeProps = (properties == null) ? Map.of() : Map.copyOf(properties);
 
         // uploaded callback
-        return new ImageUploadedEvent(publicId, url, safeProps);
+        return new ImageUploadedEvent(stored.key(), stored.url(), safeProps);
     }
 
     // upload multiple image form data
@@ -225,66 +194,86 @@ public class ImageService {
         }
 
         final String folder = buildFolder(imageType, ownerId, postId);
+        byte[] bytes = file.getBytes();
+        String contentType = file.getContentType();
 
-        Map<String, Object> options = ObjectUtils.asMap(
-                "folder",
-                folder,
-                "resource_type",
-                "image",
-                "unique_filename",
-                true, // tránh đụng public_id
-                "overwrite",
-                false, // không ghi đè ngẫu nhiên
-                "invalidate",
-                true, // xóa cache CDN khi cần
-                "quality",
-                "auto",
-                "fetch_format",
-                "auto",
-                "use_filename",
-                false);
-
-        final Map<?, ?> uploadResult;
-        try {
-            uploadResult = cloudinary.uploader().upload(file.getBytes(), options);
-        } catch (Exception ex) {
-            throw new AppException(ErrorCode.CLOUDINARY_UPLOAD_FAILED);
-        }
+        var stored = objectStorage.store(bytes, contentType, folder, extensionOf(contentType));
+        int[] size = probeDimensions(bytes);
 
         Image image = Image.builder()
                 .ownerId(ownerId)
                 .postId(postId)
-                .contentType(file.getContentType())
+                .contentType(contentType)
                 .size(file.getSize())
                 .imageType(imageType)
-                .secureUrl(uploadResult.get("secure_url").toString())
-                .publicId(uploadResult.get("public_id").toString())
-                .format(uploadResult.get("format").toString())
-                .width((Integer) uploadResult.get("width"))
-                .height((Integer) uploadResult.get("height"))
-                .imageVersions(
-                        generateImageVersions(uploadResult.get("public_id").toString()))
-                .version(uploadResult.get("version").toString())
+                .secureUrl(stored.url())
+                .publicId(stored.key())
+                .format(formatOf(contentType))
+                .width(size[0] > 0 ? size[0] : null)
+                .height(size[1] > 0 ? size[1] : null)
+                .imageVersions(generateImageVersions(stored.url()))
                 .build();
         image = imageRepository.save(image);
 
         return imageMapper.toUploadResponse(image);
     }
 
-    private String buildUrl(String publicId, int width, int height, String crop) {
-        return cloudinary
-                .url()
-                .transformation(new Transformation().width(width).height(height).crop(crop))
-                .secure(true)
-                .generate(publicId);
+    /**
+     * Cloudinary sinh sẵn ảnh thu nhỏ theo URL; MinIO là object storage thuần nên
+     * không có. Cả 4 biến thể vì thế cùng trỏ về đúng một file gốc — giữ nguyên
+     * cấu trúc {@link ImageVersions} để không phải sửa entity/DTO, và trên thực tế
+     * không nơi nào đọc tới các biến thể này (frontend chỉ dùng secureUrl).
+     */
+    private ImageVersions generateImageVersions(String url) {
+        return new ImageVersions(url, url, url, url);
     }
 
-    private ImageVersions generateImageVersions(String publicId) {
-        return new ImageVersions(
-                buildUrl(publicId, 150, 150, "fill"),
-                buildUrl(publicId, 500, 500, "limit"),
-                buildUrl(publicId, 1200, 1200, "limit"),
-                cloudinary.url().secure(true).generate(publicId));
+    /** Đoán content-type từ magic bytes cho luồng base64 (không có metadata đi kèm). */
+    private String sniffContentType(byte[] b) {
+        if (b.length >= 8 && (b[0] & 0xFF) == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G') {
+            return "image/png";
+        }
+        if (b.length >= 3 && (b[0] & 0xFF) == 0xFF && (b[1] & 0xFF) == 0xD8 && (b[2] & 0xFF) == 0xFF) {
+            return "image/jpeg";
+        }
+        if (b.length >= 6 && b[0] == 'G' && b[1] == 'I' && b[2] == 'F') {
+            return "image/gif";
+        }
+        // RIFF....WEBP
+        if (b.length >= 12 && b[0] == 'R' && b[1] == 'I' && b[2] == 'F' && b[3] == 'F' && b[8] == 'W' && b[9] == 'E') {
+            return "image/webp";
+        }
+        // ....ftypavif
+        if (b.length >= 12 && b[4] == 'f' && b[5] == 't' && b[6] == 'y' && b[7] == 'p' && b[8] == 'a' && b[9] == 'v') {
+            return "image/avif";
+        }
+        return "application/octet-stream";
+    }
+
+    private String formatOf(String contentType) {
+        if (contentType == null) return null;
+        int slash = contentType.indexOf('/');
+        return slash < 0 ? contentType : contentType.substring(slash + 1);
+    }
+
+    private String extensionOf(String contentType) {
+        String format = formatOf(contentType);
+        return format == null ? "" : "." + format;
+    }
+
+    /**
+     * Kích thước ảnh trước đây do Cloudinary trả về, giờ phải tự đọc. ImageIO không
+     * giải mã được webp/avif nên trả về {@code {0, 0}} — chấp nhận được vì không
+     * chỗ nào dựa vào width/height để hiển thị.
+     */
+    private int[] probeDimensions(byte[] bytes) {
+        try (ByteArrayInputStream in = new ByteArrayInputStream(bytes)) {
+            BufferedImage img = ImageIO.read(in);
+            return img == null ? new int[] {0, 0} : new int[] {img.getWidth(), img.getHeight()};
+        } catch (Exception e) {
+            log.debug("Không đọc được kích thước ảnh: {}", e.getMessage());
+            return new int[] {0, 0};
+        }
     }
 
     private String buildFolder(ImageType imageType, String ownerId, String postId) {

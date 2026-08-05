@@ -13,7 +13,7 @@
 | **Profile Service**      | 8082 | Quản lý profile người dùng          |
 | **Notification Service** | 8083 | Thông báo in-app và email (Brevo)     |
 | **Post Service**         | 8084 | Quản lý bài đăng, lưu, chia sẻ    |
-| **File Service**         | 8085 | Upload file và media (Cloudinary)       |
+| **File Service**         | 8085 | Upload file và media (MinIO)            |
 | **Chat Service**         | 8086 | Chat real-time với WebSocket            |
 | **Social Service**       | 8087 | Kết bạn, follow, block                 |
 | **Interaction Service**  | 8088 | Comment và like                         |
@@ -29,7 +29,7 @@ Các service gọi nhau đồng bộ qua **OpenFeign**; cấu hình nằm tĩnh 
 - **Database**: MySQL, MongoDB
 - **Authentication**: JWT, OAuth2
 - **APIs**: Swagger (Springdoc OpenAPI)
-- **Storage**: Cloudinary (media)
+- **Storage**: MinIO (object storage, S3-compatible)
 - **Email**: Brevo
 - **AI**: LLM tương thích OpenAI (kiểm duyệt nội dung, cấu hình qua `OPENAI_BASE_URL`)
 

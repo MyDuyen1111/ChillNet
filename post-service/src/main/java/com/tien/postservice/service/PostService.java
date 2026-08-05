@@ -134,7 +134,7 @@ public class PostService {
     }
 
     // Gọi ai-service kiểm duyệt nội dung. Fail-open: nếu AI lỗi hoặc không cấu hình
-    // thì vẫn cho đăng (giống Brevo/Cloudinary). Chỉ chặn khi bị gắn cờ mức HIGH.
+    // thì vẫn cho đăng (giống Brevo/MinIO). Chỉ chặn khi bị gắn cờ mức HIGH.
     private void moderateContent(String content) {
         if (content == null || content.trim().isEmpty()) {
             return;

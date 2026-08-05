@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # Chạy toàn bộ stack ChillNet: 10 JVM (heap đã cap, ~3GB) + ai-service Python (uvicorn, ~60MB).
 # Yêu cầu trước khi chạy:
-#   1. Hạ tầng đã lên:  docker compose -f docker-compose.infra.yml up -d
+#   1. Hạ tầng đã lên: MySQL + MongoDB, và MinIO (scripts/run-minio.sh) cho upload ảnh.
+#      Máy dev hiện tại chạy chúng bằng binary trong .runtime/bin, không dùng docker;
+#      docker-compose.infra.yml là đường thay thế nếu máy có docker.
 #   2. Đã build:        scripts/build-all.sh
 #   3. export JWT_SIGNER_KEY=<chuỗi bí mật HS512>   (bắt buộc)
-#      (CLIENT_ID/CLIENT_SECRET/GOOGLE_REDIRECT_URI, CLOUD_NAME/API_KEY/API_SECRET,
-#       BREVO_APIKEY là tùy chọn — thiếu thì Google login / upload ảnh / email không hoạt động,
-#       nhưng service vẫn khởi động được.)
+#      (CLIENT_ID/CLIENT_SECRET/GOOGLE_REDIRECT_URI, BREVO_APIKEY là tùy chọn —
+#       thiếu thì Google login / email không hoạt động, nhưng service vẫn khởi động được.)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Nạp cấu hình từ .env nếu có (JWT, OpenAI, Cloudinary, Brevo... để một chỗ).
+# Nạp cấu hình từ .env nếu có (JWT, OpenAI, MinIO, Brevo... để một chỗ).
 if [ -f .env ]; then
   set -a
   # shellcheck disable=SC1091

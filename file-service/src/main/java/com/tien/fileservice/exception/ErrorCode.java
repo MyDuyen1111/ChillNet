@@ -15,7 +15,7 @@ public enum ErrorCode {
     FILE_EMPTY(1009, "Tệp tin trống", HttpStatus.BAD_REQUEST),
     POST_ID_REQUIRED(1010, "ID bài viết là bắt buộc", HttpStatus.BAD_REQUEST),
     OWNER_ID_REQUIRED(1011, "ID chủ sở hữu là bắt buộc", HttpStatus.BAD_REQUEST),
-    CLOUDINARY_UPLOAD_FAILED(1012, "Tải lên thất bại", HttpStatus.INTERNAL_SERVER_ERROR),
+    STORAGE_UPLOAD_FAILED(1012, "Tải lên thất bại", HttpStatus.INTERNAL_SERVER_ERROR),
     FILE_TYPE_NOT_ALLOWED(1013, "Loại tệp tin không được phép", HttpStatus.BAD_REQUEST),
     INVALID_TOKEN(1014, "Token không hợp lệ", HttpStatus.UNAUTHORIZED),
     TOKEN_EXPIRED(1015, "Token đã hết hạn", HttpStatus.UNAUTHORIZED),

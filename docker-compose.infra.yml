@@ -1,4 +1,4 @@
-# Hạ tầng local cho ChillNet: MySQL + MongoDB (đã cap RAM cho máy yếu).
+# Hạ tầng local cho ChillNet: MySQL + MongoDB + MinIO (đã cap RAM cho máy yếu).
 # Chạy: docker compose -f docker-compose.infra.yml up -d
 # Dừng: docker compose -f docker-compose.infra.yml down
 services:
@@ -39,6 +39,28 @@ services:
       timeout: 3s
       retries: 20
 
+  # Object storage cho file-service (thay Cloudinary). Bucket và policy
+  # public-read do file-service tự tạo lúc khởi động, nên không cần sidecar `mc`.
+  minio:
+    image: minio/minio:latest
+    container_name: chillnet-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: chillnet
+      MINIO_ROOT_PASSWORD: "chillnet814362"
+    ports:
+      - "9000:9000" # S3 API — file-service gọi vào đây
+      - "9001:9001" # Web console để xem ảnh đã lên
+    volumes:
+      - chillnet_minio_data:/data
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
 volumes:
   chillnet_mysql_data:
   chillnet_mongo_data:
+  chillnet_minio_data:
