@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
 import { Heart, ChatCircle } from "@phosphor-icons/react";
+import PostLink from "../../feed/components/PostLink";
 
 // Ô vuông trong lưới bài viết của nhóm, giống lưới bài viết trang hồ sơ
 // Instagram: ảnh phủ kín + hover lộ số thích/bình luận. Bài không có ảnh hiện
@@ -9,8 +9,8 @@ export default function GroupPostCard({ post }) {
 	const image = images[0];
 
 	return (
-		<Link
-			to={`/post/${post.id}`}
+		<PostLink
+			postId={post.id}
 			className="group relative block aspect-square overflow-hidden bg-fill"
 		>
 			{image ? (
@@ -28,6 +28,6 @@ export default function GroupPostCard({ post }) {
 			) : (
 				<p className="line-clamp-4 p-2 text-xs text-muted">{post.content || "Không có nội dung."}</p>
 			)}
-		</Link>
+		</PostLink>
 	);
 }
