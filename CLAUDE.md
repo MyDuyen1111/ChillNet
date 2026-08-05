@@ -13,13 +13,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The two shared modules are consumed as normal `com.tien:*:0.0.1-SNAPSHOT` dependencies from the local `~/.m2` repository, so they must be installed before any service that depends on them will build. The easy path:
 
 ```bash
-docker compose -f docker-compose.infra.yml up -d   # MySQL 3306 + MongoDB host-port 27018, RAM-capped
+docker compose -f docker-compose.infra.yml up -d   # MySQL 3306 + MongoDB host-port 27018 + MinIO 9000/9001, RAM-capped
+scripts/run-minio.sh                               # only if infra runs as local binaries — see below
 scripts/build-all.sh                               # installs shared libs, packages 10 services
 export JWT_SIGNER_KEY=<secret> && scripts/run-all.sh   # runs everything with capped heaps (~3GB total)
 scripts/stop-all.sh
 ```
 
 Startup order (run-all.sh handles it): **identity-service (8081) → everything else**. There is no config-server anymore.
+
+**This dev machine has no docker.** MySQL and MongoDB run as local binaries out of `.runtime/bin` with data in `.runtime-data/` and PIDs in `logs/pids/` — nothing starts them from a script, they were launched by hand. MinIO follows the same shape and *does* have a script: `scripts/run-minio.sh` (binary `.runtime/bin/minio`, data `.runtime-data/minio`, pid `logs/pids/minio.pid`). `docker-compose.infra.yml` is kept as the alternative for machines that do have docker; both paths use the same ports and credentials, so `file-service`'s yaml defaults work either way.
 
 | Command | Where |
 |---|---|
@@ -32,7 +35,7 @@ Tests are only the generated `contextLoads` smoke tests — there is no real tes
 
 Spotless (palantir-java-format, tabs=4 spaces, import order `java,jakarta,org,com,com.diffplug`) is configured but **not bound to a build phase** — it never runs automatically. Run `spotless:apply` manually before committing Java changes.
 
-Env vars: `JWT_SIGNER_KEY` (identity, **required — no default**). Optional (dummy/empty defaults exist so services still boot; the feature just doesn't work): `CLIENT_ID`/`CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` (identity Google OAuth2), `CLOUD_NAME`/`API_KEY`/`API_SECRET` (file-service Cloudinary), `BREVO_APIKEY` (notification email), `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_MODEL` (ai-service moderation — blank key means moderation is skipped/fail-open).
+Env vars: `JWT_SIGNER_KEY` (identity, **required — no default**). Optional (dummy/empty defaults exist so services still boot; the feature just doesn't work): `CLIENT_ID`/`CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` (identity Google OAuth2), `MINIO_ENDPOINT`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY`/`MINIO_BUCKET`/`MINIO_PUBLIC_URL` (file-service object storage — the yaml defaults already match `docker-compose.infra.yml`, so local dev needs none of them), `BREVO_APIKEY` (notification email), `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_MODEL` (ai-service moderation — blank key means moderation is skipped/fail-open).
 
 ## Configuration is static, per service
 
@@ -78,7 +81,7 @@ Consequences for writing code in any non-identity service:
 Endpoints intended for service-to-service use go in an `InternalPostController`-style class under `@RequestMapping("/internal")` — unauthenticated by `SecurityConfig`, so they are effectively open on the service port.
 
 Three flows worth knowing:
-- **Image upload**: file-service is the only module that talks to Cloudinary. post/profile/group each have an `ImageUploadService` that base64-encodes the `MultipartFile` (`shared-common` `MediaConverter`) into an `ImageUploadEvent` (`shared-contacts`) and POSTs it via `FileClient` to file-service `/images/upload`, getting an `ImageUploadedEvent` back. The caller's JWT is forwarded, so this only works inside an authenticated request.
+- **Image upload**: file-service is the only module that talks to object storage (**MinIO**, S3-compatible — it replaced Cloudinary). `ObjectStorageService` is the only class touching the MinIO SDK; it creates the bucket and sets a public-read policy at startup so the `secure_url` stored in MongoDB stays valid forever (presigned URLs would expire and kill every old image). MinIO has no on-the-fly transformations, so all four `ImageVersions` variants point at the same original file — nothing reads them anyway. post/profile/group each have an `ImageUploadService` that base64-encodes the `MultipartFile` (`shared-common` `MediaConverter`) into an `ImageUploadEvent` (`shared-contacts`) and POSTs it via `FileClient` to file-service `/images/upload`, getting an `ImageUploadedEvent` back. The caller's JWT is forwarded, so this only works inside an authenticated request.
 - **Notifications/email**: identity-service's `NotificationService` is `@Async` fire-and-forget — it POSTs a `NotificationEvent` to notification-service `/internal/notifications/send` (`InternalNotificationController`), which sends email via Brevo and saves an in-app Notification when `param.userId` is present. Errors are swallowed on both sides so registration/OTP flows never fail because of email.
 - **Content moderation**: post-service `createPost` and interaction-service `createComment` call `ai-service` `POST /internal/moderations/moderate` (via `AiClient` Feign, JWT forwarded) before saving. `ai-service` asks an OpenAI-compatible LLM (`OPENAI_BASE_URL`/`OPENAI_MODEL`) to classify the text and returns `{flagged, severity, categories, reason}`. Callers **fail open** — if the AI call throws or the key is blank they allow the content; they only reject (`CONTENT_VIOLATION`) when `severity == HIGH`. `ai-service` itself is stateless (no DB) and also fails open internally. Note `ai-service` is **Python/FastAPI**, not Spring: `build-all.sh` sets up its `.venv` + `pip install`, `run-all.sh` starts it with `uvicorn` (not `java -jar`), and its `OPENAI_*` env comes from the root `.env`. Env config is loaded by `run-all.sh`/`build-all.sh` sourcing the root `.env` (git-ignored; `.env.example` is the template) — **optional vars there must be commented out, not left empty**, or an empty `CLIENT_ID=` overrides the yaml default and identity-service dies on Google OAuth2 startup.
 

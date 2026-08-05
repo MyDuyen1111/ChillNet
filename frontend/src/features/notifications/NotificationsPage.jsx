@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence } from "motion/react";
 import { isThisWeek, isToday } from "date-fns";
 import { ArrowClockwise, Heart } from "@phosphor-icons/react";
@@ -45,6 +45,7 @@ function groupByTime(list) {
 export default function NotificationsPage() {
 	const toast = useToast();
 	const navigate = useNavigate();
+	const location = useLocation();
 
 	const [items, setItems] = useState([]);
 	const [page, setPage] = useState(1);
@@ -146,9 +147,16 @@ export default function NotificationsPage() {
 				});
 			}
 			const target = targetFor(n);
-			if (target) navigate(target);
+			if (!target) return;
+			// Bài viết mở dạng popup đè lên trang thông báo (giống PostLink), các
+			// đích khác vẫn điều hướng bình thường.
+			if (target.startsWith("/post/")) {
+				navigate(target, { state: { background: location } });
+			} else {
+				navigate(target);
+			}
 		},
-		[navigate, toast],
+		[location, navigate, toast],
 	);
 
 	// Optimistic mark-all-read.

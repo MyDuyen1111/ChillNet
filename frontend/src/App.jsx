@@ -13,6 +13,7 @@ import RegisterPage from "./features/auth/RegisterPage";
 
 const FeedPage = lazy(() => import("./features/feed/FeedPage"));
 const PostDetailPage = lazy(() => import("./features/feed/PostDetailPage"));
+const PostDetailModal = lazy(() => import("./features/feed/PostDetailModal"));
 const FriendsPage = lazy(() => import("./features/friends/FriendsPage"));
 const ChatPage = lazy(() => import("./features/chat/ChatPage"));
 const GroupsPage = lazy(() => import("./features/groups/GroupsPage"));
@@ -31,10 +32,16 @@ function PageFallback() {
 export default function App() {
 	const location = useLocation();
 
+	// Instagram mở bài viết dạng popup đè lên trang đang xem: URL đổi sang
+	// /post/:id nhưng nền vẫn là feed/hồ sơ/nhóm. PostLink gắn location cũ vào
+	// state.background; ở đây ta cho <Routes> khớp theo location cũ đó rồi render
+	// thêm popup chồng lên. Vào thẳng URL thì không có state → rơi về trang đầy đủ.
+	const background = location.state?.background;
+
 	return (
 		<RouteErrorBoundary resetKey={location.pathname}>
 			<Suspense fallback={<PageFallback />}>
-				<Routes>
+				<Routes location={background || location}>
 					<Route path="/login" element={<LoginPage />} />
 					<Route path="/register" element={<RegisterPage />} />
 
@@ -60,6 +67,12 @@ export default function App() {
 
 					<Route path="*" element={<Navigate to="/feed" replace />} />
 				</Routes>
+
+				{background && (
+					<Routes>
+						<Route path="/post/:postId" element={<PostDetailModal />} />
+					</Routes>
+				)}
 			</Suspense>
 		</RouteErrorBoundary>
 	);

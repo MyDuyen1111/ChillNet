@@ -32,14 +32,14 @@ export default function PostDetailPage() {
 		<div className="px-4 pt-4 md:pt-[30px]">
 			<Link
 				to="/feed"
-				className="mx-auto mb-4 flex max-w-[935px] items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink"
+				className="mx-auto mb-4 flex max-w-[1100px] items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink"
 			>
 				<ArrowLeft size={18} />
 				Về bảng tin
 			</Link>
 
 			{status === "loading" && (
-				<div className="mx-auto max-w-[935px]">
+				<div className="mx-auto max-w-[1100px]">
 					<PostCardSkeleton />
 				</div>
 			)}

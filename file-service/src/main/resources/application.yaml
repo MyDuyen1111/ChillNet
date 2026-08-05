@@ -21,11 +21,15 @@ spring:
       enabled: true
       max-file-size: 10MB
       max-request-size: 20MB
-cloudinary:
-  # Default rỗng để service khởi động được; upload ảnh chỉ hoạt động khi set key Cloudinary thật.
-  cloud-name: ${CLOUD_NAME:}
-  api-key: ${API_KEY:}
-  api-secret: ${API_SECRET:}
+minio:
+  # Default khớp docker-compose.infra.yml nên chạy local không cần set gì thêm.
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:chillnet}
+  secret-key: ${MINIO_SECRET_KEY:chillnet814362}
+  bucket: ${MINIO_BUCKET:chillnet-media}
+  # URL trình duyệt dùng để tải ảnh. Tách khỏi `endpoint` vì khi chạy trong Docker
+  # file-service gọi http://minio:9000 còn trình duyệt vẫn phải là localhost.
+  public-url: ${MINIO_PUBLIC_URL:http://localhost:9000}
 
 logging:
   level:

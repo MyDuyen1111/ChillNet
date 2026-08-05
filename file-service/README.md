@@ -2,14 +2,14 @@
 
 ## 📖 Mô tả
 
-Service upload file và media, tích hợp với Cloudinary để lưu trữ và quản lý hình ảnh.
+Service upload file và media, lưu trữ trên MinIO (object storage tương thích S3).
 
 ## 🚀 Tính năng
 
 - ✅ Upload 1 hoặc nhiều hình ảnh
 - ✅ Phân loại: AVATAR, POST, BACKGROUND
-- ✅ Tích hợp Cloudinary
-- ✅ Tối ưu hình ảnh tự động
+- ✅ Tích hợp MinIO (bucket public-read, tự tạo lúc khởi động)
+
 
 ## 🔌 API chính
 
@@ -23,7 +23,7 @@ Service upload file và media, tích hợp với Cloudinary để lưu trữ và
 
 - **Port**: 8085
 - **Context Path**: `/file`
-- **Cloudinary**: Cấu hình trong Config Server
+- **MinIO**: `minio.*` trong `application.yaml` (default khớp docker-compose.infra.yml)
 - **Max file size**: 10MB
 
 ## 🚀 Chạy

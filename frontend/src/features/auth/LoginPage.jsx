@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
-import { Button, Input, useToast } from "../../components/ui";
+import { useToast } from "../../components/ui";
+import AuthButton from "./AuthButton";
+import AuthField from "./AuthField";
 import AuthLayout from "./AuthLayout";
 
 export default function LoginPage() {
@@ -19,6 +21,9 @@ export default function LoginPage() {
 
 	const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
+	// Nút xanh mờ đi khi chưa nhập đủ, giống Instagram.
+	const canSubmit = form.username.trim() !== "" && form.password !== "";
+
 	const onSubmit = async (e) => {
 		e.preventDefault();
 		setError("");
@@ -35,47 +40,47 @@ export default function LoginPage() {
 	};
 
 	return (
-		<AuthLayout
-			footer={
-				<>
-					Bạn chưa có tài khoản?{" "}
-					<Link to="/register" className="font-semibold text-accent">
-						Đăng ký
-					</Link>
-				</>
-			}
-		>
-			<form onSubmit={onSubmit} className="flex flex-col gap-1.5">
-				<Input
+		<AuthLayout>
+			<h1 className="mb-6 text-lg font-semibold text-ink">Đăng nhập vào ChillNet</h1>
+
+			<form onSubmit={onSubmit} className="flex flex-col gap-2.5">
+				<AuthField
 					name="username"
 					value={form.username}
 					onChange={onChange}
-					placeholder="Tên đăng nhập"
+					placeholder="Tên đăng nhập hoặc email"
 					autoComplete="username"
-					className="bg-canvas"
+					aria-label="Tên đăng nhập hoặc email"
 					required
 				/>
-				<Input
+				<AuthField
 					name="password"
 					type="password"
 					value={form.password}
 					onChange={onChange}
 					placeholder="Mật khẩu"
 					autoComplete="current-password"
-					className="bg-canvas"
+					aria-label="Mật khẩu"
 					required
 				/>
-				{error && <p className="text-center text-sm text-like">{error}</p>}
-				<Button
-					type="submit"
-					variant="primary"
-					size="md"
-					loading={loading}
-					className="mt-3 w-full"
-				>
+				{error && <p className="px-1 text-sm text-like">{error}</p>}
+				<AuthButton type="submit" className="mt-3" loading={loading} disabled={!canSubmit}>
 					Đăng nhập
-				</Button>
+				</AuthButton>
 			</form>
+
+			<div aria-hidden className="my-7 h-px bg-line" />
+
+			<AuthButton as={Link} to="/register" variant="accent">
+				Tạo tài khoản mới
+			</AuthButton>
+
+			<p
+				className="mt-9 text-center text-xl leading-none text-muted"
+				style={{ fontFamily: "var(--font-script)" }}
+			>
+				ChillNet
+			</p>
 		</AuthLayout>
 	);
 }

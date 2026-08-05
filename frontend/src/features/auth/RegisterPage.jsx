@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
-import { Button, Input, useToast } from "../../components/ui";
+import { useToast } from "../../components/ui";
+import AuthButton from "./AuthButton";
+import AuthField from "./AuthField";
 import AuthLayout from "./AuthLayout";
 
 const EMPTY = {
@@ -47,86 +49,80 @@ export default function RegisterPage() {
 	};
 
 	return (
-		<AuthLayout
-			footer={
-				<>
-					Đã có tài khoản?{" "}
-					<Link to="/login" className="font-semibold text-accent">
-						Đăng nhập
-					</Link>
-				</>
-			}
-		>
-			<p className="mb-4 text-center text-base font-semibold text-muted">
+		<AuthLayout>
+			<h1 className="text-lg font-semibold text-ink">Tạo tài khoản ChillNet</h1>
+			<p className="mt-1 mb-6 text-sm text-muted">
 				Đăng ký để xem ảnh và video từ bạn bè.
 			</p>
-			<form onSubmit={onSubmit} className="flex flex-col gap-1.5">
-				<div className="grid grid-cols-2 gap-1.5">
-					<Input
+
+			<form onSubmit={onSubmit} className="flex flex-col gap-2.5">
+				<div className="grid grid-cols-2 gap-2.5">
+					<AuthField
 						name="firstName"
 						value={form.firstName}
 						onChange={onChange}
 						placeholder="Họ"
 						autoComplete="given-name"
-						className="bg-canvas"
+						aria-label="Họ"
 					/>
-					<Input
+					<AuthField
 						name="lastName"
 						value={form.lastName}
 						onChange={onChange}
 						placeholder="Tên"
 						autoComplete="family-name"
-						className="bg-canvas"
+						aria-label="Tên"
 					/>
 				</div>
-				<Input
+				<AuthField
 					name="username"
 					value={form.username}
 					onChange={onChange}
 					placeholder="Tên đăng nhập"
 					autoComplete="username"
-					className="bg-canvas"
+					aria-label="Tên đăng nhập"
 					error={errors.username}
 					required
 				/>
-				<Input
+				<AuthField
 					name="email"
 					type="email"
 					value={form.email}
 					onChange={onChange}
 					placeholder="Email"
 					autoComplete="email"
-					className="bg-canvas"
+					aria-label="Email"
 					error={errors.email}
 					required
 				/>
-				<Input
+				<AuthField
 					name="password"
 					type="password"
 					value={form.password}
 					onChange={onChange}
 					placeholder="Mật khẩu"
 					autoComplete="new-password"
-					className="bg-canvas"
+					aria-label="Mật khẩu"
 					error={errors.password || errors.form}
 					required
 				/>
-				<Button
-					type="submit"
-					variant="primary"
-					size="md"
-					loading={loading}
-					className="mt-3 w-full"
-				>
+				<AuthButton type="submit" className="mt-3" loading={loading}>
 					Đăng ký
-				</Button>
+				</AuthButton>
 			</form>
+
 			<p className="mt-4 text-center text-xs leading-4 text-muted">
 				Bằng việc đăng ký, bạn đồng ý với{" "}
-				<span className="font-semibold text-muted">Điều khoản</span>,{" "}
-				<span className="font-semibold text-muted">Chính sách quyền riêng tư</span> và{" "}
-				<span className="font-semibold text-muted">Chính sách cookie</span> của chúng tôi.
+				<span className="font-semibold">Điều khoản</span>,{" "}
+				<span className="font-semibold">Chính sách quyền riêng tư</span> và{" "}
+				<span className="font-semibold">Chính sách cookie</span> của chúng tôi.
 			</p>
+
+			<div aria-hidden className="my-7 h-px bg-line" />
+
+			<AuthButton as={Link} to="/login" variant="accent">
+				Đã có tài khoản? Đăng nhập
+			</AuthButton>
 		</AuthLayout>
 	);
 }

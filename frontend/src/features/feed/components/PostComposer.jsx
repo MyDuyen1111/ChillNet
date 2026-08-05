@@ -86,7 +86,14 @@ export default function PostComposer({ open, onClose, onCreated }) {
 					content: content.trim(),
 				});
 			}
-			toast.success("Đã đăng bài viết.");
+			// post-service nuốt lỗi upload ảnh (chỉ log rồi vẫn lưu bài), nên bài
+			// trả về không có imageUrls là dấu hiệu duy nhất báo ảnh đã rớt. Không
+			// cảnh báo thì người đăng tưởng ảnh lên bình thường.
+			if (attachments.length > 0 && !(created?.imageUrls?.length > 0)) {
+				toast.error("Đã đăng bài nhưng tải ảnh lên thất bại — kiểm tra file-service và MinIO.");
+			} else {
+				toast.success("Đã đăng bài viết.");
+			}
 			onCreated?.(created);
 		} catch (err) {
 			toast.error(err?.message || "Không đăng được bài, thử lại sau.");

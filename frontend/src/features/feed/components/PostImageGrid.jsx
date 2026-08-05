@@ -44,6 +44,10 @@ export default function PostImageGrid({ images = [], onOpen, variant = "feed" })
 			<div
 				ref={scrollRef}
 				onScroll={onScroll}
+				// scrollbarWidth để inline: rule `* { scrollbar-width: thin }` trong
+				// index.css áp cho mọi phần tử, và class utility thỉnh thoảng vẫn thua
+				// tuỳ thứ tự — inline style thì chắc chắn thắng ở cả Chrome lẫn Firefox.
+				style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
 				className={cn(
 					"flex snap-x snap-mandatory overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
 					isDetail ? "h-full items-center" : "h-full",

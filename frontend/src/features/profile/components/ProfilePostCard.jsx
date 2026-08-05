@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { ChatCircle, Heart } from "@phosphor-icons/react";
+import PostLink from "../../feed/components/PostLink";
 
 // A single square tile in the profile's 3-column grid, Instagram-style: cover
 // image (or a text excerpt when the post has none), with like/comment counts
@@ -12,8 +12,8 @@ export default function ProfilePostCard({ post }) {
 	const showImage = cover && !broken;
 
 	return (
-		<Link
-			to={`/post/${post.id}`}
+		<PostLink
+			postId={post.id}
 			className="group relative block aspect-square overflow-hidden bg-fill"
 		>
 			{showImage ? (
@@ -47,6 +47,6 @@ export default function ProfilePostCard({ post }) {
 					{post.commentCount ?? 0}
 				</span>
 			</div>
-		</Link>
+		</PostLink>
 	);
 }
