@@ -19,8 +19,29 @@
 | **Interaction Service**  | 8088 | Comment và like                         |
 | **Group Service**        | 8089 | Quản lý nhóm, thành viên, quyền    |
 | **AI Service**           | 8090 | Kiểm duyệt nội dung bằng LLM (Python/FastAPI, OpenAI-compatible) |
+| **Moderation Service**   | 8091 | Báo cáo nội dung, hàng đợi kiểm duyệt, khiếu nại, nhật ký kiểm toán |
 
 Các service gọi nhau đồng bộ qua **OpenFeign**; cấu hình nằm tĩnh trong `application.yaml` của từng service.
+
+### Luồng kiểm duyệt nội dung
+
+Hệ thống có hai lớp kiểm duyệt tách biệt:
+
+- **Trước khi đăng** — `ai-service` chấm điểm bài viết/bình luận bằng LLM. Fail-open: AI lỗi hoặc chưa cấu hình khóa thì vẫn cho đăng, chỉ chặn khi mức độ là `HIGH`.
+- **Sau khi đăng** — `moderation-service` xử lý báo cáo của người dùng theo quy trình có thể kiểm toán:
+
+  ```text
+  Người dùng báo cáo  →  gộp vào hồ sơ (ModerationCase) theo đối tượng
+                      →  kiểm duyệt viên nhận xử lý
+                      →  ra quyết định + thực thi (ẩn/giảm phân phối/gỡ/khóa tài khoản)
+                      →  thông báo cho chủ nội dung và người báo cáo
+                      →  người bị xử lý khiếu nại
+                      →  giữ nguyên hoặc đảo ngược và khôi phục
+  ```
+
+  Mọi bước đều ghi vào `AuditLog` (chỉ ghi thêm, không sửa/xóa). Nội dung bị gỡ **không bị xóa khỏi cơ sở dữ liệu** mà chỉ đổi `moderationStatus`, để còn khôi phục được khi khiếu nại đúng. Phần quản trị yêu cầu `ROLE_ADMIN`.
+
+  Tài khoản bị khóa mất quyền ngay lập tức (gateway kiểm tra trạng thái ở mỗi lần introspect chứ không đợi token hết hạn) — nhưng cũng vì thế họ không tự gửi khiếu nại được, nên quản trị viên có thêm `POST /cases/{id}/revert` để gỡ biện pháp trực tiếp.
 
 ## 🛠️ Tech Stack
 
@@ -35,6 +56,24 @@ Các service gọi nhau đồng bộ qua **OpenFeign**; cấu hình nằm tĩnh 
 
 ## 🚀 Cài đặt
 
+### Chạy nhanh toàn bộ trên máy dev
+
+Sau khi môi trường local trong `.runtime/` và `.runtime-data/` đã được cài, dùng một lệnh:
+
+```bash
+scripts/start-all.sh
+```
+
+Script tự kiểm tra artifact, cài frontend dependency khi cần, rồi khởi động MySQL, MongoDB,
+MinIO, toàn bộ backend/AI và frontend. Sau khi pull hoặc đổi code backend, dừng stack và ép build lại bằng:
+
+```bash
+scripts/stop-all.sh
+scripts/start-all.sh --build
+```
+
+Dừng toàn bộ bằng `scripts/stop-all.sh`.
+
 ### Yêu cầu
 
 - Java 17+, Maven 3.6+ (hoặc dùng mvnw có sẵn trong từng service)
@@ -48,7 +87,7 @@ Các service gọi nhau đồng bộ qua **OpenFeign**; cấu hình nằm tĩnh 
    ```bash
    docker compose -f docker-compose.infra.yml up -d
    ```
-2. **Build toàn bộ** (shared libs + 10 service Java, và tự tạo venv cho ai-service Python):
+2. **Build toàn bộ** (shared libs + 11 service Java, và tự tạo venv cho ai-service Python):
 
    ```bash
    scripts/build-all.sh
@@ -79,6 +118,11 @@ Các service gọi nhau đồng bộ qua **OpenFeign**; cấu hình nằm tĩnh 
 - ✅ Quản lý nhóm với quyền hạn
 - ✅ Thông báo in-app và qua email
 - ✅ Kiểm duyệt nội dung tự động bằng AI (chặn bài/bình luận vi phạm khi đăng)
+- ✅ Báo cáo bài viết, bình luận, tài khoản và nhóm
+- ✅ Hàng đợi kiểm duyệt cho quản trị viên: nhận xử lý, ẩn/giảm phân phối/gỡ nội dung, khóa tài khoản có thời hạn hoặc vĩnh viễn
+- ✅ Khiếu nại quyết định kiểm duyệt và khôi phục khi khiếu nại đúng
+- ✅ Nhật ký kiểm toán cho mọi thao tác kiểm duyệt
+- ⬜ Giao diện web cho báo cáo/kiểm duyệt (hiện mới có API)
 
 ## 📂 Cấu trúc dự án
 
@@ -95,6 +139,7 @@ chillnet/
 ├── interaction-service/ # Comments & likes
 ├── group-service/        # Groups
 ├── ai-service/           # AI content moderation (Python/FastAPI, OpenAI-compatible)
+├── moderation-service/   # Báo cáo, kiểm duyệt thủ công, khiếu nại, audit log
 ├── shared-common/       # Shared utilities
 └── shared-contacts/     # Shared media contracts
 ```

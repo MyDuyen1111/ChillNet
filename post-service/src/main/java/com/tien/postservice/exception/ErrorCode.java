@@ -21,6 +21,8 @@ public enum ErrorCode {
     MAX_FILE_SIZE_EXCEEDED(1015, "Kích thước file vượt quá giới hạn cho phép", HttpStatus.BAD_REQUEST),
     MAX_REQUEST_SIZE_EXCEEDED(1016, "Kích thước request vượt quá giới hạn cho phép", HttpStatus.BAD_REQUEST),
     CONTENT_VIOLATION(1017, "Nội dung vi phạm tiêu chuẩn cộng đồng, vui lòng chỉnh sửa.", HttpStatus.BAD_REQUEST),
+    POST_UNDER_MODERATION(1018, "Bài viết đang bị hạn chế bởi kiểm duyệt", HttpStatus.FORBIDDEN),
+    INVALID_MODERATION_STATUS(1019, "Trạng thái kiểm duyệt không hợp lệ", HttpStatus.BAD_REQUEST),
     ;
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {

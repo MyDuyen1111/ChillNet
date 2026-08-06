@@ -27,6 +27,8 @@ public class Post {
     PrivacyType privacy;
     String groupId; // null nếu là post thông thường, có giá trị nếu là post trong group
     String originalPostId; // null nếu là post thông thường, có giá trị nếu là shared post (ID của bài viết gốc)
+    ModerationStatus moderationStatus; // null = VISIBLE (bài cũ không có trường này)
+    String moderationCaseId; // hồ sơ kiểm duyệt gần nhất tác động lên bài viết
     Instant createdDate;
     Instant modifiedDate;
 }

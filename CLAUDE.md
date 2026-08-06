@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**ChillNet** — a social network built as 10 Spring Boot microservices (Java 17, Spring Boot 3.5.5, Spring Cloud 2025.0.0) plus one **Python/FastAPI** service (`ai-service`, content moderation) plus two shared library modules. It is a polyglot stack: the 10 Java services share the Maven build/run flow; `ai-service` is a separate Python app (uvicorn). Educational/capstone project; the README is in Vietnamese, and much of the code's comments and user-facing error messages are Vietnamese too — match that when editing existing files.
+**ChillNet** — a social network built as 11 Spring Boot microservices (Java 17, Spring Boot 3.5.5, Spring Cloud 2025.0.0) plus one **Python/FastAPI** service (`ai-service`, content moderation) plus two shared library modules. It is a polyglot stack: the 11 Java services share the Maven build/run flow; `ai-service` is a separate Python app (uvicorn). Educational/capstone project; the README is in Vietnamese, and much of the code's comments and user-facing error messages are Vietnamese too — match that when editing existing files.
 
 ## Build & run
 
@@ -15,14 +15,14 @@ The two shared modules are consumed as normal `com.tien:*:0.0.1-SNAPSHOT` depend
 ```bash
 docker compose -f docker-compose.infra.yml up -d   # MySQL 3306 + MongoDB host-port 27018 + MinIO 9000/9001, RAM-capped
 scripts/run-minio.sh                               # only if infra runs as local binaries — see below
-scripts/build-all.sh                               # installs shared libs, packages 10 services
+scripts/build-all.sh                               # installs shared libs, packages 11 services
 export JWT_SIGNER_KEY=<secret> && scripts/run-all.sh   # runs everything with capped heaps (~3GB total)
 scripts/stop-all.sh
 ```
 
 Startup order (run-all.sh handles it): **identity-service (8081) → everything else**. There is no config-server anymore.
 
-**This dev machine has no docker.** MySQL and MongoDB run as local binaries out of `.runtime/bin` with data in `.runtime-data/` and PIDs in `logs/pids/` — nothing starts them from a script, they were launched by hand. MinIO follows the same shape and *does* have a script: `scripts/run-minio.sh` (binary `.runtime/bin/minio`, data `.runtime-data/minio`, pid `logs/pids/minio.pid`). `docker-compose.infra.yml` is kept as the alternative for machines that do have docker; both paths use the same ports and credentials, so `file-service`'s yaml defaults work either way.
+**This dev machine has no docker.** Use `scripts/start-all.sh` to start MySQL, MongoDB and MinIO from `.runtime/bin`, then launch every backend/AI service and the frontend. Data lives in `.runtime-data/`, logs/PIDs in `logs/`; `scripts/stop-all.sh` stops the whole local stack. `docker-compose.infra.yml` remains the alternative for machines that do have docker; both paths use the same ports and credentials, so `file-service`'s yaml defaults work either way.
 
 | Command | Where |
 |---|---|
@@ -56,8 +56,9 @@ Each service's full config lives in its own `src/main/resources/application.yaml
 | interaction-service | 8088 | `/interaction` | MySQL `interaction_service` |
 | group-service | 8089 | `/group` | MongoDB |
 | ai-service | 8090 | `/ai` | — (**Python/FastAPI**, stateless; calls an OpenAI-compatible LLM) |
+| moderation-service | 8091 | `/moderation` | MySQL `moderation_service` |
 
-MySQL schemas for profile/social are **not** auto-created (no `createDatabaseIfNotExist`) — `scripts/mysql-init/01-create-databases.sql` pre-creates all four via the compose file.
+MySQL schemas for profile/social are **not** auto-created (no `createDatabaseIfNotExist`) — `scripts/mysql-init/01-create-databases.sql` pre-creates all five via the compose file.
 
 External clients call `http://localhost:8080/api/v1/<service>/**`; the gateway `StripPrefix=2` filter removes `/api/v1/<service>` and the target service's `context-path` puts it back. So a controller mapped `@GetMapping("/posts")` in post-service is reached at `/api/v1/post/posts`. The one exception is `profile_service_internal` (`/profile/internal/**`, StripPrefix=1).
 
@@ -66,6 +67,8 @@ Java packages don't match directory names: `post-service/` → `com.tien.postser
 ## Auth model
 
 identity-service is the only issuer and the only verifier. `JwtService` signs HS512 with `jwt.signerKey`, sets **`subject` = the user's ID** (not username) and a space-delimited `scope` claim of `ROLE_*` + permissions. Revocation is a DB table of invalidated JWT IDs. The gateway's `AuthenticationFilter` calls identity's `/auth/introspect` for every non-public request — it is the only edge-side check.
+
+`JwtService.verifyToken` also calls `AccountModerationService.assertUsable(subject)`, so a `SUSPENDED`/`BANNED` account loses every open session at the next request instead of waiting for its token to expire. That costs one `SELECT` per introspect, i.e. per gateway request. An expired suspension is lifted lazily there (and at login) rather than by a scheduled job. `User.status` is separate from `isActive`, which still means "email verified".
 
 Every downstream service has its own copy of `CustomJwtDecoder` that **only parses the token and never checks the signature or the revocation list** — it trusts anything well-formed. Downstream trust therefore rests entirely on requests arriving via the gateway. Keep this in mind before assuming a service-level check is enforcing anything; it isn't a bug to fix casually, but don't add security assumptions on top of it.
 
@@ -80,10 +83,11 @@ Consequences for writing code in any non-identity service:
 
 Endpoints intended for service-to-service use go in an `InternalPostController`-style class under `@RequestMapping("/internal")` — unauthenticated by `SecurityConfig`, so they are effectively open on the service port.
 
-Three flows worth knowing:
+Four flows worth knowing:
 - **Image upload**: file-service is the only module that talks to object storage (**MinIO**, S3-compatible — it replaced Cloudinary). `ObjectStorageService` is the only class touching the MinIO SDK; it creates the bucket and sets a public-read policy at startup so the `secure_url` stored in MongoDB stays valid forever (presigned URLs would expire and kill every old image). MinIO has no on-the-fly transformations, so all four `ImageVersions` variants point at the same original file — nothing reads them anyway. post/profile/group each have an `ImageUploadService` that base64-encodes the `MultipartFile` (`shared-common` `MediaConverter`) into an `ImageUploadEvent` (`shared-contacts`) and POSTs it via `FileClient` to file-service `/images/upload`, getting an `ImageUploadedEvent` back. The caller's JWT is forwarded, so this only works inside an authenticated request.
 - **Notifications/email**: identity-service's `NotificationService` is `@Async` fire-and-forget — it POSTs a `NotificationEvent` to notification-service `/internal/notifications/send` (`InternalNotificationController`), which sends email via Brevo and saves an in-app Notification when `param.userId` is present. Errors are swallowed on both sides so registration/OTP flows never fail because of email.
 - **Content moderation**: post-service `createPost` and interaction-service `createComment` call `ai-service` `POST /internal/moderations/moderate` (via `AiClient` Feign, JWT forwarded) before saving. `ai-service` asks an OpenAI-compatible LLM (`OPENAI_BASE_URL`/`OPENAI_MODEL`) to classify the text and returns `{flagged, severity, categories, reason}`. Callers **fail open** — if the AI call throws or the key is blank they allow the content; they only reject (`CONTENT_VIOLATION`) when `severity == HIGH`. `ai-service` itself is stateless (no DB) and also fails open internally. Note `ai-service` is **Python/FastAPI**, not Spring: `build-all.sh` sets up its `.venv` + `pip install`, `run-all.sh` starts it with `uvicorn` (not `java -jar`), and its `OPENAI_*` env comes from the root `.env`. Env config is loaded by `run-all.sh`/`build-all.sh` sourcing the root `.env` (git-ignored; `.env.example` is the template) — **optional vars there must be commented out, not left empty**, or an empty `CLIENT_ID=` overrides the yaml default and identity-service dies on Google OAuth2 startup.
+- **Reporting & human moderation**: `moderation-service` owns the whole Trust & Safety loop — user report → `ModerationCase` → decision → enforcement → appeal → `AuditLog` — and is the only service allowed to change another service's content/account state. Distinct from the `ai-service` flow above: AI screening happens *before* publishing and fails open; this one happens *after*, is driven by humans (`ROLE_ADMIN`), and **fails closed** (`ENFORCEMENT_FAILED`) so a case is never marked `ACTIONED` while the content is still visible. Reports on the same target are merged into one open case (`reportCount`, severity escalates at 5 reports). Enforcement goes out over Feign to `post-service` / `interaction-service` `/internal/{posts,comments}/{id}/moderation` (sets a `ModerationStatus`; nothing is deleted, so an upheld appeal can restore it) and to `identity-service` `/internal/users/{id}/status`. Those write endpoints carry `@PreAuthorize("hasRole('ADMIN')")` — `/internal/**` is `permitAll` but the JWT is still decoded, and moderation-service forwards the moderator's token. The paired `/owner` lookups are *not* admin-gated because ordinary users hit them when filing a report. `moderation-service` never reads another service's database. Note the asymmetry a suspension creates: once `assertUsable` rejects a user, **every** gateway request from them 401s, including `POST /moderation/appeals` — so a suspended or banned account cannot appeal. `POST /cases/{id}/revert` (admin, `ACTIONED` cases only) exists for exactly that reason; without it a wrong ban would be unfixable through the API.
 
 ## Deliberate duplication
 
@@ -96,5 +100,7 @@ Standard service anatomy: `controller/` (thin, returns `ApiResponse<T>`) → `se
 ## Other notes
 
 - chat-service uses STOMP over WebSocket (`WebSocketConfig`, `WebSocketAuthInterceptor` pulls the JWT off the CONNECT frame) alongside its REST controllers.
+- `ModerationStatus` is enforced at *read* time, not by deleting rows: post-service filters in `PostService` (`isDistributable` for feed/explore/search/group, `isViewableBy` for profile/saved/detail — the owner keeps seeing their own hidden post), interaction-service filters in the `findVisible*` JPQL queries. A **null status means VISIBLE** so pre-existing posts/comments still show. If you add a new read path in either service, it will leak moderated content unless you apply the same filter.
+- moderation-service is backend-only so far — the frontend has no report button, no admin queue and no appeal screen yet.
 - Credentials live in each service's `application.yaml` as `${ENV:default}` defaults (MySQL/Mongo root password). They're already committed; don't propagate them into new files, and don't "fix" them without asking.
 - Swagger per service at `http://localhost:<port><context-path>/swagger-ui.html`.

@@ -58,6 +58,8 @@ public class JwtService {
 
     InvalidatedTokenRepository invalidatedTokenRepository;
 
+    AccountModerationService accountModerationService;
+
     @NonFinal
     @Value("${jwt.signerKey}")
     String signerKey;
@@ -115,6 +117,10 @@ public class JwtService {
             log.warn("Token đã bị revoke. JWT ID: {}", jwtId);
             throw new AppException(ErrorCode.UNAUTHENTICATED);
         }
+
+        // Tài khoản bị kiểm duyệt khóa thì token đang cầm mất hiệu lực ngay, không chờ hết hạn.
+        // Gateway introspect mọi request nên đây là chỗ duy nhất chặn được các phiên đang mở.
+        accountModerationService.assertUsable(signedJWT.getJWTClaimsSet().getSubject());
 
         return signedJWT;
     }

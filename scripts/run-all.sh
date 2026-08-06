@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Chạy toàn bộ stack ChillNet: 10 JVM (heap đã cap, ~3GB) + ai-service Python (uvicorn, ~60MB).
+# Chạy toàn bộ stack ChillNet: 11 JVM (heap đã cap, ~3.2GB) + ai-service Python (uvicorn, ~60MB).
 # Yêu cầu trước khi chạy:
 #   1. Hạ tầng đã lên: MySQL + MongoDB, và MinIO (scripts/run-minio.sh) cho upload ảnh.
 #      Máy dev hiện tại chạy chúng bằng binary trong .runtime/bin, không dùng docker;
@@ -39,6 +39,7 @@ declare -A HEAP=(
   [social-service]=256m
   [interaction-service]=256m
   [group-service]=256m
+  [moderation-service]=256m
 )
 
 declare -A PORT=(
@@ -53,6 +54,7 @@ declare -A PORT=(
   [interaction-service]=8088
   [group-service]=8089
   [ai-service]=8090
+  [moderation-service]=8091
 )
 
 start() {
@@ -100,12 +102,12 @@ start identity-service
 wait_port identity-service
 
 for svc in profile-service notification-service post-service file-service chat-service \
-  social-service interaction-service group-service ai-service api-gateway; do
+  social-service interaction-service group-service moderation-service ai-service api-gateway; do
   start "$svc"
 done
 
 for svc in profile-service notification-service post-service file-service chat-service \
-  social-service interaction-service group-service ai-service api-gateway; do
+  social-service interaction-service group-service moderation-service ai-service api-gateway; do
   wait_port "$svc"
 done
 

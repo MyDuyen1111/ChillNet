@@ -37,6 +37,14 @@ public class Comment {
     @Column(name = "parent_comment_id")
     String parentCommentId; // For replies
 
+    // Trạng thái kiểm duyệt do moderation-service đặt; null = VISIBLE (bình luận cũ)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "moderation_status")
+    ModerationStatus moderationStatus;
+
+    @Column(name = "moderation_case_id")
+    String moderationCaseId;
+
     @Column(nullable = false)
     Instant createdAt;
 
