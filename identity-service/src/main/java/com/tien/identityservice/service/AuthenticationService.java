@@ -56,6 +56,8 @@ public class AuthenticationService {
 
     ProfileService profileService;
 
+    AccountModerationService accountModerationService;
+
     // Đăng ký user mới, tạo OTP, gửi email xác thực
     @Transactional
     public UserResponse register(UserCreationRequest request) {
@@ -153,6 +155,9 @@ public class AuthenticationService {
         if (!user.getIsActive()) {
             throw new AppException(ErrorCode.USER_DISABLED);
         }
+
+        // Tài khoản bị kiểm duyệt khóa thì không cấp token mới (khóa hết hạn được tự gỡ ở đây).
+        accountModerationService.assertUsable(user);
 
         String token = jwtService.generateToken(user);
 

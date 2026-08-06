@@ -13,13 +13,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.tien.interactionservice.dto.PageResponse;
+import com.tien.interactionservice.dto.request.ContentModerationRequest;
 import com.tien.interactionservice.dto.request.CreateCommentRequest;
 import com.tien.interactionservice.dto.request.ModerationRequest;
 import com.tien.interactionservice.dto.request.UpdateCommentRequest;
 import com.tien.interactionservice.dto.response.CommentResponse;
+import com.tien.interactionservice.dto.response.ModeratedContentResponse;
 import com.tien.interactionservice.dto.response.ModerationResponse;
 import com.tien.interactionservice.dto.response.ProfileResponse;
 import com.tien.interactionservice.entity.Comment;
+import com.tien.interactionservice.entity.ModerationStatus;
 import com.tien.interactionservice.exception.AppException;
 import com.tien.interactionservice.exception.ErrorCode;
 import com.tien.interactionservice.mapper.CommentMapper;
@@ -39,6 +42,11 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class CommentService {
+
+    // Bình luận còn hiển thị với người khác. HIDDEN/REMOVED chỉ chủ bình luận còn thấy.
+    private static final List<ModerationStatus> VISIBLE_STATUSES =
+            List.of(ModerationStatus.VISIBLE, ModerationStatus.LIMITED);
+
     CommentRepository commentRepository;
     LikeRepository likeRepository;
     PostClient postClient;
@@ -83,7 +91,8 @@ public class CommentService {
         String userId = getCurrentUserId();
 
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by("createdAt").descending());
-        Page<Comment> commentsPage = commentRepository.findByPostIdAndParentCommentIdIsNull(postId, pageable);
+        Page<Comment> commentsPage =
+                commentRepository.findVisibleRootComments(postId, userId, VISIBLE_STATUSES, pageable);
 
         List<CommentResponse> commentResponses = commentsPage.getContent().stream()
                 .map(comment -> buildCommentResponse(comment, userId))
@@ -93,7 +102,7 @@ public class CommentService {
             List<String> commentIds =
                     commentResponses.stream().map(CommentResponse::getId).toList();
 
-            List<Comment> allReplies = commentRepository.findByParentCommentIdInOrderByCreatedAtAsc(commentIds);
+            List<Comment> allReplies = commentRepository.findVisibleRepliesIn(commentIds, userId, VISIBLE_STATUSES);
             var repliesMap = allReplies.stream().collect(Collectors.groupingBy(Comment::getParentCommentId));
 
             commentResponses.forEach(commentResponse -> {
@@ -223,13 +232,17 @@ public class CommentService {
     }
 
     public long getCommentCountByPost(String postId) {
-        return commentRepository.countByPostId(postId);
+        // Bình luận đã bị kiểm duyệt gỡ không tính vào số hiển thị trên bài viết.
+        return commentRepository.countVisibleByPostId(postId, VISIBLE_STATUSES);
     }
 
     public CommentResponse getCommentById(String commentId) {
         String userId = getCurrentUserId();
         Comment comment =
                 commentRepository.findById(commentId).orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
+        if (!isViewableBy(comment, userId)) {
+            throw new AppException(ErrorCode.COMMENT_NOT_FOUND);
+        }
         return buildCommentResponse(comment, userId);
     }
 
@@ -243,7 +256,7 @@ public class CommentService {
         Pageable pageable = PageRequest.of(page - 1, size, Sort.by("createdAt").ascending());
 
         // Get all replies for this comment
-        List<Comment> allReplies = commentRepository.findByParentCommentIdOrderByCreatedAtAsc(commentId);
+        List<Comment> allReplies = commentRepository.findVisibleReplies(commentId, userId, VISIBLE_STATUSES);
 
         // Manual pagination since we don't have Page query
         int start = (page - 1) * size;
@@ -269,6 +282,67 @@ public class CommentService {
 
     private String getCurrentUserId() {
         return SecurityContextHolder.getContext().getAuthentication().getName();
+    }
+
+    // ===== Kiểm duyệt: chỉ được gọi từ moderation-service qua InternalInteractionController =====
+
+    // Chủ bình luận — dùng để xác thực đối tượng khi người dùng gửi báo cáo.
+    public String getCommentOwner(String commentId) {
+        return commentRepository
+                .findById(commentId)
+                .map(Comment::getUserId)
+                .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
+    }
+
+    // Ảnh chụp bình luận cho kiểm duyệt viên xem trước khi ra quyết định.
+    public ModeratedContentResponse getCommentForModeration(String commentId) {
+        Comment comment =
+                commentRepository.findById(commentId).orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
+
+        return ModeratedContentResponse.builder()
+                .id(comment.getId())
+                .ownerId(comment.getUserId())
+                .content(comment.getContent())
+                .moderationStatus(
+                        comment.getModerationStatus() != null
+                                ? comment.getModerationStatus().name()
+                                : ModerationStatus.VISIBLE.name())
+                .createdAt(
+                        comment.getCreatedAt() != null ? comment.getCreatedAt().toString() : null)
+                .build();
+    }
+
+    /**
+     * Đặt trạng thái kiểm duyệt cho bình luận. Không xóa bản ghi kể cả với REMOVED
+     * vì quyết định còn có thể bị khiếu nại và đảo ngược.
+     */
+    @Transactional
+    public void applyModeration(String commentId, ContentModerationRequest request) {
+        Comment comment =
+                commentRepository.findById(commentId).orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
+
+        ModerationStatus status;
+        try {
+            status = ModerationStatus.valueOf(request.getStatus());
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new AppException(ErrorCode.INVALID_MODERATION_STATUS);
+        }
+
+        comment.setModerationStatus(status);
+        comment.setModerationCaseId(request.getCaseId());
+        commentRepository.save(comment);
+
+        log.info(
+                "Bình luận {} chuyển sang trạng thái kiểm duyệt {} (hồ sơ {})", commentId, status, request.getCaseId());
+    }
+
+    // Bình luận bị ẩn/gỡ chỉ còn chủ bình luận thấy được.
+    private boolean isViewableBy(Comment comment, String viewerId) {
+        ModerationStatus status = comment.getModerationStatus();
+        if (status == null || VISIBLE_STATUSES.contains(status)) {
+            return true;
+        }
+        return comment.getUserId().equals(viewerId);
     }
 
     // Gọi ai-service kiểm duyệt bình luận. Fail-open: AI lỗi/không cấu hình thì vẫn

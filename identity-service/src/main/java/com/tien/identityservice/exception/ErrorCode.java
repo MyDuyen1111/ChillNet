@@ -31,6 +31,10 @@ public enum ErrorCode {
     OTP_EXPIRED(1402, "Mã OTP đã hết hạn", HttpStatus.BAD_REQUEST),
     OTP_INVALID(1403, "Mã OTP không hợp lệ", HttpStatus.BAD_REQUEST),
     OTP_TOO_FREQUENT(1404, "Vui lòng chờ trước khi yêu cầu mã OTP tiếp theo", HttpStatus.TOO_MANY_REQUESTS),
+
+    ACCOUNT_SUSPENDED(1501, "Tài khoản đang bị tạm khóa do vi phạm tiêu chuẩn cộng đồng", HttpStatus.FORBIDDEN),
+    ACCOUNT_BANNED(1502, "Tài khoản đã bị khóa vĩnh viễn do vi phạm tiêu chuẩn cộng đồng", HttpStatus.FORBIDDEN),
+    INVALID_ACCOUNT_STATUS(1503, "Trạng thái tài khoản không hợp lệ", HttpStatus.BAD_REQUEST),
     ;
 
     ErrorCode(int code, String message, HttpStatusCode statusCode) {

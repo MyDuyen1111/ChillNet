@@ -14,10 +14,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.tien.postservice.dto.PageResponse;
+import com.tien.postservice.dto.request.ContentModerationRequest;
 import com.tien.postservice.dto.request.ModerationRequest;
+import com.tien.postservice.dto.response.ModeratedContentResponse;
 import com.tien.postservice.dto.response.ModerationResponse;
 import com.tien.postservice.dto.response.PostResponse;
 import com.tien.postservice.dto.response.UserProfileResponse;
+import com.tien.postservice.entity.ModerationStatus;
 import com.tien.postservice.entity.Post;
 import com.tien.postservice.entity.PrivacyType;
 import com.tien.postservice.entity.SavedPost;
@@ -232,7 +235,8 @@ public class PostService {
         var postList = pageData.getContent().stream()
                 .map(savedPost -> {
                     Post post = postMap.get(savedPost.getPostId());
-                    if (post == null) {
+                    // Bài đã lưu nhưng bị kiểm duyệt gỡ thì không hiện lại trong mục đã lưu.
+                    if (post == null || !isViewableBy(post, userId)) {
                         return null;
                     }
                     var postResponse = postMapper.toPostResponse(post);
@@ -257,6 +261,11 @@ public class PostService {
         // Kiểm tra post có tồn tại không
         Post originalPost =
                 postRepository.findById(postId).orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));
+
+        // Không cho lan truyền tiếp nội dung đang bị kiểm duyệt xử lý
+        if (!isDistributable(originalPost)) {
+            throw new AppException(ErrorCode.POST_UNDER_MODERATION);
+        }
 
         // Kiểm tra quyền share: chỉ có thể share PUBLIC posts hoặc posts của chính mình
         if (originalPost.getPrivacy() == PrivacyType.PRIVATE
@@ -334,6 +343,11 @@ public class PostService {
         // Kiểm tra quyền xem: nếu post là PRIVATE, chỉ owner mới xem được
         if (post.getPrivacy() == PrivacyType.PRIVATE && !post.getUserId().equals(userId)) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        // Bài bị ẩn/gỡ: chỉ chủ bài viết còn truy cập được (để biết mình bị xử lý và đi khiếu nại)
+        if (!isViewableBy(post, userId)) {
+            throw new AppException(ErrorCode.POST_NOT_FOUND);
         }
 
         return buildPostResponse(post, post.getUserId());
@@ -440,6 +454,7 @@ public class PostService {
         var postList = pageData.getContent().stream()
                 .filter(post ->
                         post.getGroupId() == null || post.getGroupId().trim().isEmpty())
+                .filter(post -> isViewableBy(post, currentUserId))
                 .map(post -> {
                     var postResponse = postMapper.toPostResponse(post);
                     enrichPostResponse(postResponse, post, userProfile);
@@ -508,6 +523,7 @@ public class PostService {
         var postList = pageData.getContent().stream()
                 .filter(post ->
                         post.getGroupId() == null || post.getGroupId().trim().isEmpty())
+                .filter(this::isDistributable)
                 .map(post -> buildPostResponse(post, post.getUserId()))
                 .toList();
 
@@ -535,6 +551,7 @@ public class PostService {
         var postList = pageData.getContent().stream()
                 .filter(post ->
                         post.getGroupId() == null || post.getGroupId().trim().isEmpty())
+                .filter(this::isDistributable)
                 .map(post -> buildPostResponse(post, post.getUserId()))
                 .toList();
 
@@ -598,6 +615,7 @@ public class PostService {
         var postList = pageData.getContent().stream()
                 .filter(post ->
                         post.getGroupId() == null || post.getGroupId().trim().isEmpty())
+                .filter(this::isDistributable)
                 .map(post -> buildPostResponse(post, post.getUserId()))
                 .toList();
 
@@ -629,6 +647,7 @@ public class PostService {
         var pageData = postRepository.findByGroupIdWithPrivacy(groupId, userId, pageable);
 
         var postList = pageData.getContent().stream()
+                .filter(this::isDistributable)
                 .map(post -> buildPostResponse(post, post.getUserId()))
                 .toList();
 
@@ -783,5 +802,68 @@ public class PostService {
 
     public boolean checkPostExists(String postId) {
         return postRepository.existsById(postId);
+    }
+
+    // ===== Kiểm duyệt: chỉ được gọi từ moderation-service qua InternalPostController =====
+
+    // Chủ sở hữu bài viết — dùng để xác thực đối tượng khi người dùng gửi báo cáo.
+    public String getPostOwner(String postId) {
+        return postRepository
+                .findById(postId)
+                .map(Post::getUserId)
+                .orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));
+    }
+
+    // Ảnh chụp bài viết cho kiểm duyệt viên xem trước khi ra quyết định.
+    public ModeratedContentResponse getPostForModeration(String postId) {
+        Post post = postRepository.findById(postId).orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));
+
+        return ModeratedContentResponse.builder()
+                .id(post.getId())
+                .ownerId(post.getUserId())
+                .content(post.getContent())
+                .imageUrls(post.getImageUrls())
+                .moderationStatus(
+                        post.getModerationStatus() != null
+                                ? post.getModerationStatus().name()
+                                : ModerationStatus.VISIBLE.name())
+                .createdAt(post.getCreatedDate() != null ? post.getCreatedDate().toString() : null)
+                .build();
+    }
+
+    /**
+     * Đặt trạng thái kiểm duyệt cho bài viết. Cố tình không xóa dữ liệu kể cả với REMOVED:
+     * hồ sơ còn có thể bị khiếu nại và đảo ngược.
+     */
+    public void applyModeration(String postId, ContentModerationRequest request) {
+        Post post = postRepository.findById(postId).orElseThrow(() -> new AppException(ErrorCode.POST_NOT_FOUND));
+
+        ModerationStatus status;
+        try {
+            status = ModerationStatus.valueOf(request.getStatus());
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new AppException(ErrorCode.INVALID_MODERATION_STATUS);
+        }
+
+        post.setModerationStatus(status);
+        post.setModerationCaseId(request.getCaseId());
+        post.setModifiedDate(Instant.now());
+        postRepository.save(post);
+
+        log.info("Bài viết {} chuyển sang trạng thái kiểm duyệt {} (hồ sơ {})", postId, status, request.getCaseId());
+    }
+
+    // Bài chỉ được phân phối (feed, khám phá, tìm kiếm, group) khi chưa bị kiểm duyệt xử lý.
+    private boolean isDistributable(Post post) {
+        return post.getModerationStatus() == null || post.getModerationStatus() == ModerationStatus.VISIBLE;
+    }
+
+    // Trên trang cá nhân, bài bị giảm phân phối vẫn hiện; bài bị ẩn/gỡ chỉ chủ bài viết còn thấy.
+    private boolean isViewableBy(Post post, String viewerId) {
+        ModerationStatus status = post.getModerationStatus();
+        if (status == null || status == ModerationStatus.VISIBLE || status == ModerationStatus.LIMITED) {
+            return true;
+        }
+        return post.getUserId().equals(viewerId);
     }
 }
