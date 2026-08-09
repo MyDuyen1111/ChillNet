@@ -45,6 +45,10 @@ public class SecurityConfig {
         "/auth/reset-password"
     };
 
+    // Tách riêng khỏi PUBLIC_ENDPOINTS: danh sách trên chỉ được mở cho POST, còn
+    // health check là GET.
+    private final String[] ACTUATOR_ENDPOINTS = {"/actuator/health", "/actuator/info"};
+
     // Swagger UI endpoints
     private final String[] SWAGGER_ENDPOINTS = {
         "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**"
@@ -61,6 +65,8 @@ public class SecurityConfig {
         httpSecurity.authorizeHttpRequests(requests -> requests.requestMatchers(HttpMethod.POST, PUBLIC_ENDPOINTS)
                 .permitAll()
                 .requestMatchers("/oauth2/**", "/login/oauth2/**")
+                .permitAll()
+                .requestMatchers(ACTUATOR_ENDPOINTS)
                 .permitAll()
                 .requestMatchers(SWAGGER_ENDPOINTS)
                 .permitAll()

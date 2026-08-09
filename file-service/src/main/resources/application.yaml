@@ -1,5 +1,5 @@
 server:
-  port: 8085
+  port: ${FILE_SERVICE_PORT:8085}
   servlet:
     context-path: /file
 
@@ -15,7 +15,7 @@ spring:
     name: file-service
   data:
     mongodb:
-      uri: ${MONGODB_URI:mongodb://root:814362@localhost:27018/file-service?authSource=admin}
+      uri: ${MONGODB_URI:mongodb://root:814362@localhost:${MONGODB_PORT:27018}/file-service?authSource=admin}
   servlet:
     multipart:
       enabled: true
@@ -23,15 +23,26 @@ spring:
       max-request-size: 20MB
 minio:
   # Default khớp docker-compose.infra.yml nên chạy local không cần set gì thêm.
-  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  endpoint: ${MINIO_ENDPOINT:http://localhost:${MINIO_API_PORT:9000}}
   access-key: ${MINIO_ACCESS_KEY:chillnet}
   secret-key: ${MINIO_SECRET_KEY:chillnet814362}
   bucket: ${MINIO_BUCKET:chillnet-media}
   # URL trình duyệt dùng để tải ảnh. Tách khỏi `endpoint` vì khi chạy trong Docker
   # file-service gọi http://minio:9000 còn trình duyệt vẫn phải là localhost.
-  public-url: ${MINIO_PUBLIC_URL:http://localhost:9000}
+  public-url: ${MINIO_PUBLIC_URL:http://localhost:${MINIO_API_PORT:9000}}
 
 logging:
   level:
     org:
       springframework: INFO
+
+# Actuator: chi mo health va info. Cac endpoint con lai (env, loggers, heapdump) khong
+# duoc expose vi chung lo cau hinh va bien moi truong ra ngoai.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized

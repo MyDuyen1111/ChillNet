@@ -61,6 +61,12 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         String path = exchange.getRequest().getURI().getPath();
         log.debug("Đang xử lý request: {}", path);
 
+        // Health check của chính gateway nằm ngoài api-prefix nên không khớp
+        // publicEndpoints; phải cho qua riêng, nếu không mọi công cụ giám sát đều nhận 401.
+        if (path.startsWith("/actuator/health") || path.startsWith("/actuator/info")) {
+            return chain.filter(exchange);
+        }
+
         if (isPublicEndpoint(exchange.getRequest())) {
             log.debug("Endpoint công khai, bỏ qua xác thực");
             return chain.filter(exchange);

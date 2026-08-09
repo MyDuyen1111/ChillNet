@@ -1,5 +1,5 @@
 server:
-  port: 8086
+  port: ${CHAT_SERVICE_PORT:8086}
   servlet:
     context-path: /chat
 
@@ -15,9 +15,20 @@ spring:
     name: chat-service
   data:
     mongodb:
-      uri: ${MONGODB_URI:mongodb://root:814362@localhost:27018/chat-service?authSource=admin}
+      uri: ${MONGODB_URI:mongodb://root:814362@localhost:${MONGODB_PORT:27018}/chat-service?authSource=admin}
       auto-index-creation: true
 app:
   services:
     profile:
-      url: http://localhost:8082/profile
+      url: ${PROFILE_SERVICE_URL:http://localhost:${PROFILE_SERVICE_PORT:8082}/profile}
+
+# Actuator: chi mo health va info. Cac endpoint con lai (env, loggers, heapdump) khong
+# duoc expose vi chung lo cau hinh va bien moi truong ra ngoai.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized

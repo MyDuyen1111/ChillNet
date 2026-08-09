@@ -19,7 +19,7 @@ import java.util.List;
 @Configuration
 public class WebClientConfiguration {
 
-    @Value("${app.identity-service-url:http://localhost:8081/identity}")
+    @Value("${IDENTITY_SERVICE_URL:http://localhost:${IDENTITY_SERVICE_PORT:8081}/identity}")
     private String identityServiceUrl;
 
     @Bean

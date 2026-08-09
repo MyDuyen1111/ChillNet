@@ -30,7 +30,7 @@ import lombok.experimental.FieldDefaults;
 public class SecurityConfig {
 
     // Các endpoint public không yêu cầu xác thực
-    private final String[] PUBLIC_ENDPOINTS = {"/internal/**"};
+    private final String[] PUBLIC_ENDPOINTS = {"/internal/**", "/actuator/health", "/actuator/info"};
     // Swagger UI endpoints
     private final String[] SWAGGER_ENDPOINTS = {
         "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**"
