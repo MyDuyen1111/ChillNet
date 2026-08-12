@@ -44,6 +44,7 @@ fi
 
 RUNTIME_BIN="$ROOT/.runtime/bin"
 DATA_ROOT="$ROOT/.runtime-data"
+COMPOSE_FILE="$ROOT/docker-compose.infra.yml"
 LOG_ROOT="$ROOT/logs"
 PID_ROOT="$LOG_ROOT/pids"
 mkdir -p "$LOG_ROOT" "$PID_ROOT"
@@ -99,6 +100,34 @@ wait_port() {
 
 require_exec() {
   [ -x "$1" ] || fail "Thieu executable $1 -- moi truong local chua duoc cai day du."
+}
+
+has_local_infra() {
+  [ -x "$RUNTIME_BIN/mysqld" ] \
+    && [ -x "$RUNTIME_BIN/mongod" ] \
+    && [ -x "$RUNTIME_BIN/minio" ] \
+    && [ -f "$DATA_ROOT/mysql/ibdata1" ] \
+    && [ -f "$DATA_ROOT/mongo/WiredTiger" ]
+}
+
+has_docker_compose() {
+  command -v docker >/dev/null 2>&1 \
+    && docker compose version >/dev/null 2>&1
+}
+
+wait_docker_port() {
+  local service=$1 port=$2 tries=${3:-60}
+  until port_open "$port"; do
+    tries=$((tries - 1))
+    if [ "$tries" -le 0 ]; then
+      echo "!! Docker service $service khong len duoc port $port" >&2
+      docker compose -f "$COMPOSE_FILE" ps >&2 || true
+      docker compose -f "$COMPOSE_FILE" logs --tail=80 "$service" >&2 || true
+      return 1
+    fi
+    sleep 1
+  done
+  echo "    $service OK (:$port)"
 }
 
 jar_for() {
@@ -248,6 +277,28 @@ start_minio() {
   wait_port minio-console "$MINIO_CONSOLE_PORT" "$LOG_ROOT/minio.log"
 }
 
+start_docker_infra() {
+  has_docker_compose \
+    || fail "Khong co .runtime/bin day du va Docker Compose khong san sang. Cai Docker, hoac cap lai .runtime/.runtime-data."
+
+  echo "==> .runtime khong day du; start MySQL, MongoDB, MinIO bang Docker Compose"
+  docker compose -f "$COMPOSE_FILE" up -d
+  wait_docker_port mysql "$MYSQL_PORT"
+  wait_docker_port mongodb "$MONGODB_PORT"
+  wait_docker_port minio-api "$MINIO_API_PORT"
+  wait_docker_port minio-console "$MINIO_CONSOLE_PORT"
+}
+
+start_infra() {
+  if has_local_infra; then
+    start_mysql
+    start_mongodb
+    start_minio
+  else
+    start_docker_infra
+  fi
+}
+
 start_frontend() {
   if port_open "$FRONTEND_PORT"; then
     echo "==> Frontend da chay san (:$FRONTEND_PORT)"
@@ -282,9 +333,7 @@ check_application_ports
 
 ensure_build
 ensure_frontend_deps
-start_mysql
-start_mongodb
-start_minio
+start_infra
 
 echo "==> start backend + ai-service"
 scripts/run-all.sh

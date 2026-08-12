@@ -417,6 +417,9 @@ function FeedPostCard({ post, onDeleted }) {
 	const toast = useToast();
 	const images = post.imageUrls ?? [];
 	const hasImages = images.length > 0;
+	// Bám tỉ lệ ảnh thật (đã kẹp 4:5..1.91:1) thay vì ép vuông — ảnh ngang hiện
+	// trọn vẹn, không còn bị cắt hai bên như trước.
+	const ratio = useImageRatio(images[0]);
 
 	const [commentText, setCommentText] = useState("");
 	const [sending, setSending] = useState(false);
@@ -472,7 +475,11 @@ function FeedPostCard({ post, onDeleted }) {
 				/>
 			</div>
 
-			{hasImages && <PostImageGrid images={images} onOpen={a.setLightbox} />}
+			{hasImages && (
+				<div className="w-full bg-fill" style={{ aspectRatio: ratio }}>
+					<PostImageGrid images={images} onOpen={a.setLightbox} />
+				</div>
+			)}
 
 			{/* Bài chỉ có chữ thì không có ảnh để "đẩy" thanh hành động xuống, nên
 			    caption phải lên trước — nếu không các nút sẽ dính ngay dưới tên

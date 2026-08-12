@@ -36,9 +36,12 @@ export default function PostImageGrid({ images = [], onOpen, variant = "feed" })
 
 	return (
 		<div
+			// Chiều cao khung do phần tử cha quyết định (bám tỉ lệ ảnh thật qua
+			// useImageRatio) ở cả feed lẫn detail, nên ở đây chỉ cần h-full — không
+			// còn ép aspect-square ở feed (thứ đã cắt mất hai bên ảnh ngang).
 			className={cn(
 				"group relative w-full overflow-hidden",
-				isDetail ? "h-full bg-black" : "aspect-square bg-fill",
+				isDetail ? "h-full bg-black" : "h-full bg-fill",
 			)}
 		>
 			<div
@@ -65,10 +68,7 @@ export default function PostImageGrid({ images = [], onOpen, variant = "feed" })
 								src={url}
 								alt={`Ảnh bài viết ${i + 1}`}
 								loading="lazy"
-								className={cn(
-									"h-full w-full",
-									isDetail ? "object-contain" : "object-cover",
-								)}
+								className="h-full w-full object-contain"
 							/>
 						</button>
 					) : (
@@ -77,10 +77,7 @@ export default function PostImageGrid({ images = [], onOpen, variant = "feed" })
 								src={url}
 								alt={`Ảnh bài viết ${i + 1}`}
 								loading="lazy"
-								className={cn(
-									"h-full w-full",
-									isDetail ? "object-contain" : "object-cover",
-								)}
+								className="h-full w-full object-contain"
 							/>
 						</div>
 					),
