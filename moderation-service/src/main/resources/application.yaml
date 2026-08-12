@@ -1,5 +1,5 @@
 server:
-  port: 8091
+  port: ${MODERATION_SERVICE_PORT:8091}
   servlet:
     context-path: /moderation
 
@@ -14,7 +14,7 @@ spring:
   application:
     name: moderation-service
   datasource:
-    url: ${DBMS_CONNECTION:jdbc:mysql://localhost:3306/moderation_service?createDatabaseIfNotExist=true}
+    url: ${DBMS_CONNECTION:jdbc:mysql://localhost:${MYSQL_PORT:3306}/moderation_service?createDatabaseIfNotExist=true}
     username: ${DBMS_USERNAME:root}
     password: ${DBMS_PASSWORD:814362}
   jpa:
@@ -25,14 +25,25 @@ spring:
 app:
   services:
     profile:
-      url: http://localhost:8082/profile
+      url: ${PROFILE_SERVICE_URL:http://localhost:${PROFILE_SERVICE_PORT:8082}/profile}
     notification:
-      url: http://localhost:8083/notification
+      url: ${NOTIFICATION_SERVICE_URL:http://localhost:${NOTIFICATION_SERVICE_PORT:8083}/notification}
     post:
-      url: http://localhost:8084/post
+      url: ${POST_SERVICE_URL:http://localhost:${POST_SERVICE_PORT:8084}/post}
     interaction:
-      url: http://localhost:8088/interaction
+      url: ${INTERACTION_SERVICE_URL:http://localhost:${INTERACTION_SERVICE_PORT:8088}/interaction}
     group:
-      url: http://localhost:8089/group
+      url: ${GROUP_SERVICE_URL:http://localhost:${GROUP_SERVICE_PORT:8089}/group}
     identity:
-      url: http://localhost:8081/identity
+      url: ${IDENTITY_SERVICE_URL:http://localhost:${IDENTITY_SERVICE_PORT:8081}/identity}
+
+# Actuator: chi mo health va info. Cac endpoint con lai (env, loggers, heapdump) khong
+# duoc expose vi chung lo cau hinh va bien moi truong ra ngoai.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized

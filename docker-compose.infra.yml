@@ -9,7 +9,7 @@ services:
       MYSQL_ROOT_PASSWORD: "814362"
     command: --innodb-buffer-pool-size=256M
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - ./scripts/mysql-init:/docker-entrypoint-initdb.d:ro
       - chillnet_mysql_data:/var/lib/mysql
@@ -29,7 +29,7 @@ services:
     command: --wiredTigerCacheSizeGB 0.5
     ports:
       # 27018 phía host vì 27017 hay bị chiếm (VSCode/Mongo có sẵn trên máy dev)
-      - "27018:27017"
+      - "${MONGODB_PORT:-27018}:27017"
     volumes:
       - chillnet_mongo_data:/data/db
     mem_limit: 768m
@@ -49,8 +49,8 @@ services:
       MINIO_ROOT_USER: chillnet
       MINIO_ROOT_PASSWORD: "chillnet814362"
     ports:
-      - "9000:9000" # S3 API — file-service gọi vào đây
-      - "9001:9001" # Web console để xem ảnh đã lên
+      - "${MINIO_API_PORT:-9000}:9000" # S3 API — file-service gọi vào đây
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # Web console để xem ảnh đã lên
     volumes:
       - chillnet_minio_data:/data
     mem_limit: 512m

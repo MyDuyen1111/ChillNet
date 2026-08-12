@@ -1,5 +1,5 @@
 server:
-  port: 8082
+  port: ${PROFILE_SERVICE_PORT:8082}
   servlet:
     context-path: /profile
 
@@ -14,7 +14,7 @@ spring:
   application:
     name: profile-service
   datasource:
-    url: ${DBMS_CONNECTION:jdbc:mysql://localhost:3306/profile_service}
+    url: ${DBMS_CONNECTION:jdbc:mysql://localhost:${MYSQL_PORT:3306}/profile_service}
     username: ${DBMS_USERNAME:root}
     password: ${DBMS_PASSWORD:814362}
   jpa:
@@ -24,4 +24,15 @@ spring:
 app:
   services:
     file:
-      url: http://localhost:8085/file
+      url: ${FILE_SERVICE_URL:http://localhost:${FILE_SERVICE_PORT:8085}/file}
+
+# Actuator: chi mo health va info. Cac endpoint con lai (env, loggers, heapdump) khong
+# duoc expose vi chung lo cau hinh va bien moi truong ra ngoai.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized

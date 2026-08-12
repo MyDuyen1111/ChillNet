@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+	BookOpen,
+	Flag,
 	Gear,
 	Heart,
 	House,
@@ -9,6 +11,7 @@ import {
 	Moon,
 	PaperPlaneTilt,
 	PlusSquare,
+	ShieldCheck,
 	SignOut,
 	Sun,
 	UsersThree,
@@ -120,7 +123,7 @@ function RailItem({ to, label, icon: Icon, compact, badge, onClick, as = "link" 
 }
 
 /** The "Thêm" popover: settings, theme, sign out. */
-function MoreMenu({ compact, onLogout }) {
+function MoreMenu({ compact, onLogout, isAdmin }) {
 	const [open, setOpen] = useState(false);
 	const [dark, toggleDark] = useDarkMode();
 	const ref = useRef(null);
@@ -155,6 +158,25 @@ function MoreMenu({ compact, onLogout }) {
 						<Link to="/profile" onClick={() => setOpen(false)} className={row}>
 							Cài đặt <Gear size={18} />
 						</Link>
+						<Link to="/my-reports" onClick={() => setOpen(false)} className={row}>
+							Báo cáo của tôi <Flag size={18} />
+						</Link>
+						{isAdmin && (
+							<Link
+								to="/admin/moderation"
+								onClick={() => setOpen(false)}
+								className={row}
+							>
+								Kiểm duyệt <ShieldCheck size={18} />
+							</Link>
+						)}
+						<Link
+							to="/policies/community"
+							onClick={() => setOpen(false)}
+							className={row}
+						>
+							Tiêu chuẩn cộng đồng <BookOpen size={18} />
+						</Link>
 						<button type="button" onClick={toggleDark} className={row}>
 							Chuyển chế độ {dark ? <Sun size={18} /> : <Moon size={18} />}
 						</button>
@@ -183,6 +205,7 @@ export default function AppShell() {
 	const unread = useUnreadCount();
 	const name = displayName(user?.profile);
 	const avatar = user?.profile?.avatar;
+	const isAdmin = Boolean(user?.roles?.includes("ROLE_ADMIN"));
 
 	// Instagram narrows the rail to icons whenever the page owns the full width
 	// (the inbox), so the conversation list gets its space back.
@@ -277,7 +300,7 @@ export default function AppShell() {
 					</NavLink>
 				</nav>
 
-				<MoreMenu compact={compact} onLogout={onLogout} />
+				<MoreMenu compact={compact} onLogout={onLogout} isAdmin={isAdmin} />
 			</aside>
 
 			{/* Phone top bar */}

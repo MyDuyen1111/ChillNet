@@ -2,6 +2,7 @@ package com.tien.fileservice.configuration;
 
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -16,6 +17,12 @@ import io.swagger.v3.oas.models.servers.Server;
 @Configuration
 public class OpenApiConfig {
 
+    @Value("${server.port}")
+    private String localPort;
+
+    @Value("${API_GATEWAY_PORT:8080}")
+    private String gatewayPort;
+
     @Bean
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
@@ -28,8 +35,12 @@ public class OpenApiConfig {
                                 .name("Apache 2.0")
                                 .url("https://www.apache.org/licenses/LICENSE-2.0.html")))
                 .servers(List.of(
-                        new Server().url("http://localhost:8085/file").description("Local Development Server"),
-                        new Server().url("http://localhost:8080/file").description("API Gateway")))
+                        new Server()
+                                .url("http://localhost:" + localPort + "/file")
+                                .description("Local Development Server"),
+                        new Server()
+                                .url("http://localhost:" + gatewayPort + "/file")
+                                .description("API Gateway")))
                 .addSecurityItem(new SecurityRequirement().addList("Bearer Authentication"))
                 .components(new io.swagger.v3.oas.models.Components()
                         .addSecuritySchemes(

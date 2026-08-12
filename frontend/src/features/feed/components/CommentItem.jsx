@@ -4,8 +4,10 @@ import { Heart } from "@phosphor-icons/react";
 import { Avatar, useToast } from "../../../components/ui";
 import api from "../../../lib/api";
 import endpoints from "../../../lib/endpoints";
+import { useAuth } from "../../../lib/auth";
 import { timeAgo } from "../../../lib/format";
 import { cn } from "../../../lib/cn";
+import ReportModal from "../../moderation/ReportModal";
 
 // One comment plus, at depth 0, its replies (1 level deep). Replies embedded in
 // the response show immediately; the rest load on demand from `/replies`.
@@ -13,7 +15,9 @@ import { cn } from "../../../lib/cn";
 // a tiny heart parked at the far right of the row.
 export default function CommentItem({ comment, postId, depth = 0, onCountChange }) {
 	const toast = useToast();
+	const { userId } = useAuth();
 
+	const [reportOpen, setReportOpen] = useState(false);
 	const [liked, setLiked] = useState(Boolean(comment.isLiked));
 	const [likeCount, setLikeCount] = useState(comment.likeCount ?? 0);
 
@@ -113,6 +117,15 @@ export default function CommentItem({ comment, postId, depth = 0, onCountChange 
 							Trả lời
 						</button>
 					)}
+					{comment.userId !== userId && (
+						<button
+							type="button"
+							onClick={() => setReportOpen(true)}
+							className="font-semibold hover:text-ink"
+						>
+							Báo cáo
+						</button>
+					)}
 				</div>
 
 				{replyBoxOpen && (
@@ -177,6 +190,13 @@ export default function CommentItem({ comment, postId, depth = 0, onCountChange 
 			>
 				<Heart size={12} weight={liked ? "fill" : "regular"} className={cn(liked && "text-like")} />
 			</button>
+
+			<ReportModal
+				open={reportOpen}
+				onClose={() => setReportOpen(false)}
+				targetType="COMMENT"
+				targetId={comment.id}
+			/>
 		</div>
 	);
 }

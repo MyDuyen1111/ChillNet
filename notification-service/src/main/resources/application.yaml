@@ -1,5 +1,5 @@
 server:
-  port: 8083
+  port: ${NOTIFICATION_SERVICE_PORT:8083}
   servlet:
     context-path: /notification
 
@@ -15,9 +15,20 @@ spring:
     name: notification-service
   data:
     mongodb:
-      uri: ${MONGODB_URI:mongodb://root:814362@localhost:27018/notification-service?authSource=admin}
+      uri: ${MONGODB_URI:mongodb://root:814362@localhost:${MONGODB_PORT:27018}/notification-service?authSource=admin}
 notification:
   email:
     brevo-url: ${BREVO_URL:https://api.brevo.com}
     # Default rỗng để service khởi động được; gửi email chỉ hoạt động khi set BREVO_APIKEY thật.
     brevo-apikey: ${BREVO_APIKEY:}
+
+# Actuator: chi mo health va info. Cac endpoint con lai (env, loggers, heapdump) khong
+# duoc expose vi chung lo cau hinh va bien moi truong ra ngoai.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized

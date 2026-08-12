@@ -567,6 +567,30 @@ public class PostService {
     public PageResponse<PostResponse> getFeed(int page, int size) {
         String userId = getCurrentUserId();
 
+        // Admin xem được bài của tất cả người dùng ngay trên feed, không cần kết bạn/follow.
+        // Feed admin = mọi bài PUBLIC cá nhân (trừ tác giả bị block), bỏ bài trong group,
+        // vẫn tôn trọng trạng thái kiểm duyệt như feed thường.
+        if (isAdmin()) {
+            Set<String> adminBlocked = new HashSet<>(getBlockedUserIds(userId));
+            Pageable adminPageable =
+                    PageRequest.of(page - 1, size, Sort.by("createdDate").descending());
+            var adminPage = postRepository.findByPrivacyAndUserIdNotIn(
+                    PrivacyType.PUBLIC, List.copyOf(adminBlocked), adminPageable);
+            var adminPosts = adminPage.getContent().stream()
+                    .filter(post -> post.getGroupId() == null
+                            || post.getGroupId().trim().isEmpty())
+                    .filter(this::isDistributable)
+                    .map(post -> buildPostResponse(post, post.getUserId()))
+                    .toList();
+            return PageResponse.<PostResponse>builder()
+                    .currentPage(page)
+                    .pageSize(adminPage.getSize())
+                    .totalPages(adminPage.getTotalPages())
+                    .totalElements(adminPage.getTotalElements())
+                    .data(adminPosts)
+                    .build();
+        }
+
         Set<String> friendIds = new HashSet<>();
         Set<String> followingIds = new HashSet<>();
 
@@ -675,6 +699,12 @@ public class PostService {
     // Helper methods
     private String getCurrentUserId() {
         return SecurityContextHolder.getContext().getAuthentication().getName();
+    }
+
+    // JwtGrantedAuthoritiesConverter chạy với prefix rỗng nên authority là "ROLE_ADMIN".
+    private boolean isAdmin() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 
     private UserProfileResponse getUserProfile(String userId) {

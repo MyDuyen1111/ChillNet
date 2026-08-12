@@ -1,5 +1,5 @@
 server:
-  port: 8081
+  port: ${IDENTITY_SERVICE_PORT:8081}
   servlet:
     context-path: /identity
 
@@ -14,7 +14,7 @@ spring:
   application:
     name: identity-service
   datasource:
-    url: ${DBMS_CONNECTION:jdbc:mysql://localhost:3306/identity_service?createDatabaseIfNotExist=true}
+    url: ${DBMS_CONNECTION:jdbc:mysql://localhost:${MYSQL_PORT:3306}/identity_service?createDatabaseIfNotExist=true}
     username: ${DBMS_USERNAME:root}
     password: ${DBMS_PASSWORD:814362}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -36,7 +36,7 @@ spring:
             client-id: ${CLIENT_ID:dummy-client-id}
             client-secret: ${CLIENT_SECRET:dummy-client-secret}
             scope: profile, email
-            redirect-uri: "${GOOGLE_REDIRECT_URI:http://localhost:8081/identity/login/oauth2/code}/{registrationId}"
+            redirect-uri: "${GOOGLE_REDIRECT_URI:http://localhost:${IDENTITY_SERVICE_PORT:8081}/identity/login/oauth2/code}/{registrationId}"
             client-name: Google
         provider:
           google:
@@ -51,13 +51,24 @@ jwt:
   refreshable-duration: 36000 # in seconds
 app:
   services:
-    profile: http://localhost:8082/profile
+    profile: ${PROFILE_SERVICE_URL:http://localhost:${PROFILE_SERVICE_PORT:8082}/profile}
     notification:
-      url: http://localhost:8083/notification
+      url: ${NOTIFICATION_SERVICE_URL:http://localhost:${NOTIFICATION_SERVICE_PORT:8083}/notification}
   oauth2:
-    authorizedRedirectUri: "http://localhost:5173/oauth2/redirect"
+    authorizedRedirectUri: "${OAUTH2_REDIRECT_URI:http://localhost:${FRONTEND_PORT:5174}/oauth2/redirect}"
   seed:
     admin:
       username: "admin"
       password: "admin"
       email: "chillnetadmin@yopmail.com"
+
+# Actuator: chi mo health va info. Cac endpoint con lai (env, loggers, heapdump) khong
+# duoc expose vi chung lo cau hinh va bien moi truong ra ngoai.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized

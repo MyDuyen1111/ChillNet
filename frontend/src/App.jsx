@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import AdminRoute from "./components/layout/AdminRoute";
 import AppShell from "./components/layout/AppShell";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
 import RouteErrorBoundary from "./components/layout/RouteErrorBoundary";
@@ -20,6 +21,12 @@ const GroupsPage = lazy(() => import("./features/groups/GroupsPage"));
 const GroupDetailPage = lazy(() => import("./features/groups/GroupDetailPage"));
 const NotificationsPage = lazy(() => import("./features/notifications/NotificationsPage"));
 const ProfilePage = lazy(() => import("./features/profile/ProfilePage"));
+const MyReportsPage = lazy(() => import("./features/moderation/MyReportsPage"));
+const CommunityPolicyPage = lazy(() => import("./features/policies/CommunityPolicyPage"));
+const PrivacyPolicyPage = lazy(() => import("./features/policies/PrivacyPolicyPage"));
+const ModerationQueuePage = lazy(() => import("./features/admin/ModerationQueuePage"));
+const CaseDetailPage = lazy(() => import("./features/admin/CaseDetailPage"));
+const AppealsPage = lazy(() => import("./features/admin/AppealsPage"));
 
 function PageFallback() {
 	return (
@@ -45,6 +52,12 @@ export default function App() {
 					<Route path="/login" element={<LoginPage />} />
 					<Route path="/register" element={<RegisterPage />} />
 
+					{/* Chính sách là tài liệu tĩnh và nằm NGOÀI ProtectedRoute: người
+					    chưa đăng nhập, và nhất là người đang bị hạn chế tài khoản,
+					    vẫn phải đọc được luật và cách khiếu nại. */}
+					<Route path="/policies/community" element={<CommunityPolicyPage />} />
+					<Route path="/policies/privacy" element={<PrivacyPolicyPage />} />
+
 					<Route
 						element={
 							<ProtectedRoute>
@@ -63,6 +76,34 @@ export default function App() {
 						<Route path="/notifications" element={<NotificationsPage />} />
 						<Route path="/profile" element={<ProfilePage />} />
 						<Route path="/profile/:userId" element={<ProfilePage />} />
+						<Route path="/my-reports" element={<MyReportsPage />} />
+
+						{/* Khu vực kiểm duyệt. AdminRoute chỉ ẩn giao diện — mọi endpoint
+						    tương ứng đều còn @PreAuthorize("hasRole('ADMIN')") ở service. */}
+						<Route
+							path="/admin/moderation"
+							element={
+								<AdminRoute>
+									<ModerationQueuePage />
+								</AdminRoute>
+							}
+						/>
+						<Route
+							path="/admin/moderation/:caseId"
+							element={
+								<AdminRoute>
+									<CaseDetailPage />
+								</AdminRoute>
+							}
+						/>
+						<Route
+							path="/admin/appeals"
+							element={
+								<AdminRoute>
+									<AppealsPage />
+								</AdminRoute>
+							}
+						/>
 					</Route>
 
 					<Route path="*" element={<Navigate to="/feed" replace />} />

@@ -9,6 +9,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
+MINIO_API_PORT="${MINIO_API_PORT:-9000}"
+MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9001}"
+
 BIN=.runtime/bin/minio
 DATA=.runtime-data/minio
 
@@ -28,18 +38,18 @@ mkdir -p "$DATA" logs/pids
 export MINIO_ROOT_USER="${MINIO_ACCESS_KEY:-chillnet}"
 export MINIO_ROOT_PASSWORD="${MINIO_SECRET_KEY:-chillnet814362}"
 
-echo "==> start minio (API :9000, console :9001)"
-nohup "$BIN" server "$DATA" --address ":9000" --console-address ":9001" \
+echo "==> start minio (API :$MINIO_API_PORT, console :$MINIO_CONSOLE_PORT)"
+nohup "$BIN" server "$DATA" --address ":$MINIO_API_PORT" --console-address ":$MINIO_CONSOLE_PORT" \
   > logs/minio.log 2>&1 &
 echo $! > logs/pids/minio.pid
 
 tries=60
-until (echo > /dev/tcp/127.0.0.1/9000) 2>/dev/null; do
+until (echo > "/dev/tcp/127.0.0.1/$MINIO_API_PORT") 2>/dev/null; do
   tries=$((tries - 1))
   if [ "$tries" -le 0 ]; then
-    echo "!! MinIO không lên được port 9000 — xem logs/minio.log" >&2
+    echo "!! MinIO không lên được port $MINIO_API_PORT — xem logs/minio.log" >&2
     exit 1
   fi
   sleep 1
 done
-echo "    minio OK (API http://localhost:9000, console http://localhost:9001)"
+echo "    minio OK (API http://localhost:$MINIO_API_PORT, console http://localhost:$MINIO_CONSOLE_PORT)"

@@ -6,6 +6,7 @@ import {
 	BookmarkSimple,
 	ChatCircle,
 	DotsThree,
+	Flag,
 	Heart,
 	PaperPlaneTilt,
 	Smiley,
@@ -18,6 +19,7 @@ import { useAuth } from "../../../lib/auth";
 import { postDate, timeAgo } from "../../../lib/format";
 import { cn } from "../../../lib/cn";
 import { useComments } from "../hooks/useComments";
+import ReportModal from "../../moderation/ReportModal";
 import PostImageGrid from "./PostImageGrid";
 import PostLink from "./PostLink";
 import ImageLightbox from "./ImageLightbox";
@@ -37,6 +39,7 @@ function usePostActions(post, onDeleted) {
 	const [shareCount, setShareCount] = useState(Number(post.shareCount ?? 0));
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [reportOpen, setReportOpen] = useState(false);
 	const [deleting, setDeleting] = useState(false);
 	const [reposting, setReposting] = useState(false);
 	const [lightbox, setLightbox] = useState(-1);
@@ -123,6 +126,8 @@ function usePostActions(post, onDeleted) {
 		setMenuOpen,
 		confirmOpen,
 		setConfirmOpen,
+		reportOpen,
+		setReportOpen,
 		deleting,
 		lightbox,
 		setLightbox,
@@ -136,8 +141,9 @@ function usePostActions(post, onDeleted) {
 	};
 }
 
-// Kebab menu, only rendered for the post's owner.
-function OwnerMenu({ menuOpen, setMenuOpen, onDeleteClick }) {
+// Kebab menu. Chủ bài viết thấy "Xoá"; người khác thấy "Báo cáo" — nên menu này
+// giờ luôn được render, không còn phụ thuộc vào isOwner như trước.
+function PostMenu({ menuOpen, setMenuOpen, isOwner, onDeleteClick, onReportClick }) {
 	return (
 		<div className="relative shrink-0">
 			<IconButton label="Tuỳ chọn bài viết" onClick={() => setMenuOpen((v) => !v)}>
@@ -154,17 +160,31 @@ function OwnerMenu({ menuOpen, setMenuOpen, onDeleteClick }) {
 							transition={{ duration: 0.12 }}
 							className="absolute right-0 top-9 z-20 w-44 overflow-hidden rounded-xl bg-surface py-1 shadow-[0_4px_12px_rgba(0,0,0,0.15)] ring-1 ring-line"
 						>
-							<button
-								type="button"
-								onClick={() => {
-									setMenuOpen(false);
-									onDeleteClick();
-								}}
-								className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-like transition-opacity hover:opacity-70"
-							>
-								<Trash size={16} />
-								Xoá bài viết
-							</button>
+							{isOwner ? (
+								<button
+									type="button"
+									onClick={() => {
+										setMenuOpen(false);
+										onDeleteClick();
+									}}
+									className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-like transition-opacity hover:opacity-70"
+								>
+									<Trash size={16} />
+									Xoá bài viết
+								</button>
+							) : (
+								<button
+									type="button"
+									onClick={() => {
+										setMenuOpen(false);
+										onReportClick();
+									}}
+									className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-like transition-opacity hover:opacity-70"
+								>
+									<Flag size={16} />
+									Báo cáo
+								</button>
+							)}
 						</motion.div>
 					</>
 				)}
@@ -397,6 +417,9 @@ function FeedPostCard({ post, onDeleted }) {
 	const toast = useToast();
 	const images = post.imageUrls ?? [];
 	const hasImages = images.length > 0;
+	// Bám tỉ lệ ảnh thật (đã kẹp 4:5..1.91:1) thay vì ép vuông — ảnh ngang hiện
+	// trọn vẹn, không còn bị cắt hai bên như trước.
+	const ratio = useImageRatio(images[0]);
 
 	const [commentText, setCommentText] = useState("");
 	const [sending, setSending] = useState(false);
@@ -443,16 +466,20 @@ function FeedPostCard({ post, onDeleted }) {
 						{timeAgo(post.createdDate || post.created)}
 					</PostLink>
 				</div>
-				{a.isOwner && (
-					<OwnerMenu
-						menuOpen={a.menuOpen}
-						setMenuOpen={a.setMenuOpen}
-						onDeleteClick={() => a.setConfirmOpen(true)}
-					/>
-				)}
+				<PostMenu
+					menuOpen={a.menuOpen}
+					setMenuOpen={a.setMenuOpen}
+					isOwner={a.isOwner}
+					onDeleteClick={() => a.setConfirmOpen(true)}
+					onReportClick={() => a.setReportOpen(true)}
+				/>
 			</div>
 
-			{hasImages && <PostImageGrid images={images} onOpen={a.setLightbox} />}
+			{hasImages && (
+				<div className="w-full bg-fill" style={{ aspectRatio: ratio }}>
+					<PostImageGrid images={images} onOpen={a.setLightbox} />
+				</div>
+			)}
 
 			{/* Bài chỉ có chữ thì không có ảnh để "đẩy" thanh hành động xuống, nên
 			    caption phải lên trước — nếu không các nút sẽ dính ngay dưới tên
@@ -531,6 +558,13 @@ function FeedPostCard({ post, onDeleted }) {
 				onConfirm={a.doDelete}
 				loading={a.deleting}
 			/>
+
+			<ReportModal
+				open={a.reportOpen}
+				onClose={() => a.setReportOpen(false)}
+				targetType="POST"
+				targetId={post.id}
+			/>
 		</Card>
 	);
 }
@@ -607,13 +641,13 @@ function PostDetailCard({ post, onDeleted }) {
 					>
 						{post.username || "Người dùng"}
 					</Link>
-					{a.isOwner && (
-						<OwnerMenu
-							menuOpen={a.menuOpen}
-							setMenuOpen={a.setMenuOpen}
-							onDeleteClick={() => a.setConfirmOpen(true)}
-						/>
-					)}
+					<PostMenu
+						menuOpen={a.menuOpen}
+						setMenuOpen={a.setMenuOpen}
+						isOwner={a.isOwner}
+						onDeleteClick={() => a.setConfirmOpen(true)}
+						onReportClick={() => a.setReportOpen(true)}
+					/>
 				</div>
 
 				<div className="flex-1 overflow-y-auto px-4 py-4">
@@ -686,6 +720,13 @@ function PostDetailCard({ post, onDeleted }) {
 				onClose={() => a.setConfirmOpen(false)}
 				onConfirm={a.doDelete}
 				loading={a.deleting}
+			/>
+
+			<ReportModal
+				open={a.reportOpen}
+				onClose={() => a.setReportOpen(false)}
+				targetType="POST"
+				targetId={post.id}
 			/>
 		</Card>
 	);

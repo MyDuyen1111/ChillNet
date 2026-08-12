@@ -133,6 +133,33 @@ export const endpoints = {
 		uploadFormData: svc("file", "/images/upload-form-data"),
 	},
 
+	// ---- moderation-service (Trust & Safety) ----
+	// Người dùng thường chỉ chạm tới `reports.create`, `reports.mine`,
+	// `cases.againstMe` và `appeals.*`. Phần còn lại yêu cầu ROLE_ADMIN — gateway
+	// vẫn cho request đi qua, nhưng service trả 403 nếu thiếu quyền.
+	moderation: {
+		reports: {
+			create: svc("moderation", "/reports"),
+			mine: svc("moderation", "/reports/my"),
+		},
+		cases: {
+			queue: svc("moderation", "/cases"),
+			stats: svc("moderation", "/cases/stats"),
+			againstMe: svc("moderation", "/cases/against-me"),
+			byId: (id) => svc("moderation", `/cases/${id}`),
+			audit: (id) => svc("moderation", `/cases/${id}/audit`),
+			assign: (id) => svc("moderation", `/cases/${id}/assign`),
+			decision: (id) => svc("moderation", `/cases/${id}/decision`),
+			revert: (id) => svc("moderation", `/cases/${id}/revert`),
+		},
+		appeals: {
+			create: svc("moderation", "/appeals"),
+			mine: svc("moderation", "/appeals/my"),
+			queue: svc("moderation", "/appeals"),
+			review: (id) => svc("moderation", `/appeals/${id}/review`),
+		},
+	},
+
 	// ---- ai-service (content moderation) ----
 	// Server-side moderation already runs on post/comment create and rejects with a
 	// CONTENT_VIOLATION message. This endpoint lets the composer pre-check a draft.

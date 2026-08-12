@@ -58,14 +58,18 @@ Hệ thống có hai lớp kiểm duyệt tách biệt:
 
 ### Chạy nhanh toàn bộ trên máy dev
 
-Sau khi môi trường local trong `.runtime/` và `.runtime-data/` đã được cài, dùng một lệnh:
+Sau khi có một trong hai môi trường hạ tầng bên dưới, dùng một lệnh:
+
+- Docker + Docker Compose (khuyến nghị; script tự khởi động MySQL, MongoDB và MinIO), hoặc
+- bộ binary local đã được cấp trong `.runtime/` cùng dữ liệu trong `.runtime-data/`.
 
 ```bash
 scripts/start-all.sh
 ```
 
-Script tự kiểm tra artifact, cài frontend dependency khi cần, rồi khởi động MySQL, MongoDB,
-MinIO, toàn bộ backend/AI và frontend. Sau khi pull hoặc đổi code backend, dừng stack và ép build lại bằng:
+Script tự kiểm tra artifact, cài frontend dependency khi cần, chọn Docker Compose khi không có
+đủ binary trong `.runtime/`, rồi khởi động MySQL, MongoDB, MinIO, toàn bộ backend/AI và frontend.
+Sau khi pull hoặc đổi code backend, dừng stack và ép build lại bằng:
 
 ```bash
 scripts/stop-all.sh

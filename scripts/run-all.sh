@@ -43,18 +43,18 @@ declare -A HEAP=(
 )
 
 declare -A PORT=(
-  [api-gateway]=8080
-  [identity-service]=8081
-  [profile-service]=8082
-  [notification-service]=8083
-  [post-service]=8084
-  [file-service]=8085
-  [chat-service]=8086
-  [social-service]=8087
-  [interaction-service]=8088
-  [group-service]=8089
-  [ai-service]=8090
-  [moderation-service]=8091
+  [api-gateway]="${API_GATEWAY_PORT:-8080}"
+  [identity-service]="${IDENTITY_SERVICE_PORT:-8081}"
+  [profile-service]="${PROFILE_SERVICE_PORT:-8082}"
+  [notification-service]="${NOTIFICATION_SERVICE_PORT:-8083}"
+  [post-service]="${POST_SERVICE_PORT:-8084}"
+  [file-service]="${FILE_SERVICE_PORT:-8085}"
+  [chat-service]="${CHAT_SERVICE_PORT:-8086}"
+  [social-service]="${SOCIAL_SERVICE_PORT:-8087}"
+  [interaction-service]="${INTERACTION_SERVICE_PORT:-8088}"
+  [group-service]="${GROUP_SERVICE_PORT:-8089}"
+  [ai-service]="${AI_SERVICE_PORT:-8090}"
+  [moderation-service]="${MODERATION_SERVICE_PORT:-8091}"
 )
 
 start() {
@@ -111,4 +111,4 @@ for svc in profile-service notification-service post-service file-service chat-s
   wait_port "$svc"
 done
 
-echo "==> Toàn bộ stack đã lên. Gateway: http://localhost:8080 — dừng bằng scripts/stop-all.sh"
+echo "==> Toàn bộ stack đã lên. Gateway: http://localhost:${PORT[api-gateway]} — dừng bằng scripts/stop-all.sh"
