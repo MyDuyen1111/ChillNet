@@ -9,7 +9,15 @@ import { cn } from "../../lib/cn";
  * semibold title on a hairline rule, and the close button parked in the
  * viewport corner rather than inside the panel.
  */
-export default function Modal({ open, onClose, title, children, className, size = "md" }) {
+export default function Modal({
+	open,
+	onClose,
+	title,
+	children,
+	className,
+	bodyClassName = "p-4",
+	size = "md",
+}) {
 	const reduce = useReducedMotion();
 
 	useEffect(() => {
@@ -23,7 +31,8 @@ export default function Modal({ open, onClose, title, children, className, size 
 		};
 	}, [open, onClose]);
 
-	const widths = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-2xl" };
+	// `xl` dành cho dialog dạng 2 cột (ảnh trái + form phải) như trình soạn bài.
+	const widths = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-2xl", xl: "max-w-[860px]" };
 
 	return createPortal(
 		<AnimatePresence>
@@ -61,7 +70,7 @@ export default function Modal({ open, onClose, title, children, className, size 
 								<h2 className="text-base font-semibold text-ink">{title}</h2>
 							</div>
 						)}
-						<div className="p-4">{children}</div>
+						<div className={cn(bodyClassName)}>{children}</div>
 					</motion.div>
 				</div>
 			)}

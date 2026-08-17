@@ -21,6 +21,8 @@ notification:
     brevo-url: ${BREVO_URL:https://api.brevo.com}
     # Default rỗng để service khởi động được; gửi email chỉ hoạt động khi set BREVO_APIKEY thật.
     brevo-apikey: ${BREVO_APIKEY:}
+    sender-name: ${BREVO_SENDER_NAME:ChillNet}
+    sender-email: ${BREVO_SENDER_EMAIL:}
 
 # Actuator: chi mo health va info. Cac endpoint con lai (env, loggers, heapdump) khong
 # duoc expose vi chung lo cau hinh va bien moi truong ra ngoai.

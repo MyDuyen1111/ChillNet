@@ -62,7 +62,19 @@ public class AuthenticationService {
     // Đăng ký user mới, tạo OTP, gửi email xác thực
     @Transactional
     public UserResponse register(UserCreationRequest request) {
+        String username = request.getUsername().trim();
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+
+        if (userRepository.existsByUsername(username)) {
+            throw new AppException(ErrorCode.USER_EXISTED);
+        }
+        if (userRepository.existsByEmail(email)) {
+            throw new AppException(ErrorCode.EMAIL_EXISTED);
+        }
+
         User user = userMapper.toUser(request);
+        user.setUsername(username);
+        user.setEmail(email);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
 
         HashSet<Role> roles = new HashSet<>();
@@ -74,7 +86,9 @@ public class AuthenticationService {
         user.setProvider(SignInProvider.LOCAL);
 
         try {
-            user = userRepository.save(user);
+            // Flush before creating the remote profile so duplicate-key races do
+            // not leave an orphan profile in profile-service.
+            user = userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException exception) {
             throw new AppException(ErrorCode.USER_EXISTED);
         }

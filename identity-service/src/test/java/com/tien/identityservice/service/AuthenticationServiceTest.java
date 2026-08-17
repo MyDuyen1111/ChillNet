@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.tien.identityservice.dto.request.AuthenticationRequest;
+import com.tien.identityservice.dto.request.UserCreationRequest;
 import com.tien.identityservice.entity.User;
 import com.tien.identityservice.exception.AppException;
 import com.tien.identityservice.exception.ErrorCode;
@@ -52,6 +53,27 @@ class AuthenticationServiceTest {
 
     @InjectMocks
     AuthenticationService authenticationService;
+
+    @Test
+    void reportsDuplicateUsernameDuringRegistration() {
+        var request = registrationRequest("existing", "new@example.com");
+        when(userRepository.existsByUsername("existing")).thenReturn(true);
+
+        assertThatThrownBy(() -> authenticationService.register(request))
+                .isInstanceOfSatisfying(AppException.class, exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.USER_EXISTED));
+    }
+
+    @Test
+    void reportsDuplicateEmailDuringRegistrationIgnoringCaseAndWhitespace() {
+        var request = registrationRequest("new-user", " Existing@Example.com ");
+        when(userRepository.existsByUsername("new-user")).thenReturn(false);
+        when(userRepository.existsByEmail("existing@example.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> authenticationService.register(request))
+                .isInstanceOfSatisfying(AppException.class, exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.EMAIL_EXISTED));
+    }
 
     @Test
     void reportsUnverifiedEmailInsteadOfDisabledAccount() {
@@ -93,6 +115,16 @@ class AuthenticationServiceTest {
         return AuthenticationRequest.builder()
                 .username(username)
                 .password("Password1!")
+                .build();
+    }
+
+    private UserCreationRequest registrationRequest(String username, String email) {
+        return UserCreationRequest.builder()
+                .username(username)
+                .email(email)
+                .password("Password1!")
+                .firstName("New")
+                .lastName("User")
                 .build();
     }
 

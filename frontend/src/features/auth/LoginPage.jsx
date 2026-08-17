@@ -83,12 +83,6 @@ export default function LoginPage() {
 					Đăng nhập
 				</AuthButton>
 			</form>
-			<p className="mt-4 text-center text-sm text-muted">
-				Chưa xác minh tài khoản?{" "}
-				<Link to="/verify-email" className="font-semibold text-accent hover:underline">
-					Nhập mã OTP
-				</Link>
-			</p>
 
 			<div aria-hidden className="my-7 h-px bg-line" />
 

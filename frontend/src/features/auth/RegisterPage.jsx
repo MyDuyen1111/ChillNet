@@ -20,6 +20,8 @@ const PASSWORD_PATTERN =
 	/^(?=.*\p{Ll})(?=.*\p{Lu})(?=.*\d)(?=.*[^\p{L}\p{N}\s])\S{8,}$/u;
 const PASSWORD_ERROR =
 	"Mật khẩu phải có ít nhất 8 ký tự, gồm chữ thường, chữ in hoa, chữ số và ký tự đặc biệt.";
+const USER_EXISTED_CODE = 1101;
+const EMAIL_EXISTED_CODE = 1304;
 
 export default function RegisterPage() {
 	const { register } = useAuth();
@@ -80,7 +82,15 @@ export default function RegisterPage() {
 				},
 			});
 		} catch (err) {
-			setErrors({ form: err.message || "Đăng ký thất bại." });
+			if (err.code === USER_EXISTED_CODE) {
+				setErrors({ username: "Tên đăng nhập đã được sử dụng." });
+			} else if (err.code === EMAIL_EXISTED_CODE) {
+				setErrors({
+					email: "Email đã được đăng ký. Hãy đăng nhập để tiếp tục xác minh.",
+				});
+			} else {
+				setErrors({ form: err.message || "Đăng ký thất bại." });
+			}
 		} finally {
 			setLoading(false);
 		}

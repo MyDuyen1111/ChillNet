@@ -31,6 +31,14 @@ public class EmailService {
     @NonFinal
     String apiKey;
 
+    @Value("${notification.email.sender-name}")
+    @NonFinal
+    String senderName;
+
+    @Value("${notification.email.sender-email}")
+    @NonFinal
+    String senderEmail;
+
     public EmailResponse sendEmail(SendEmailRequest request) {
         if (request == null) {
             log.error("SendEmailRequest is null");
@@ -49,10 +57,15 @@ public class EmailService {
             throw new AppException(ErrorCode.CANNOT_SEND_EMAIL);
         }
 
+        if (senderEmail == null || senderEmail.isBlank()) {
+            log.error("Brevo sender email is not configured");
+            throw new AppException(ErrorCode.CANNOT_SEND_EMAIL);
+        }
+
         EmailRequest emailRequest = EmailRequest.builder()
                 .sender(Sender.builder()
-                        .name("ChillNet")
-                        .email("tavantien786@gmail.com")
+                        .name(senderName)
+                        .email(senderEmail)
                         .build())
                 .to(List.of(request.getTo()))
                 .subject(request.getSubject())
