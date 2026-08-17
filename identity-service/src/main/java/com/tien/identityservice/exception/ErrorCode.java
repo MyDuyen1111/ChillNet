@@ -31,6 +31,8 @@ public enum ErrorCode {
     EMAIL_EXISTED(1304, "Email đã tồn tại", HttpStatus.BAD_REQUEST),
     FIRST_NAME_REQUIRED(1305, "Họ là bắt buộc", HttpStatus.BAD_REQUEST),
     LAST_NAME_REQUIRED(1306, "Tên là bắt buộc", HttpStatus.BAD_REQUEST),
+    EMAIL_NOT_VERIFIED(
+            1307, "Email chưa được xác minh. Vui lòng nhập mã OTP đã gửi đến email của bạn", HttpStatus.FORBIDDEN),
 
     OTP_NOT_FOUND(1401, "Không tìm thấy mã OTP", HttpStatus.NOT_FOUND),
     OTP_EXPIRED(1402, "Mã OTP đã hết hạn", HttpStatus.BAD_REQUEST),

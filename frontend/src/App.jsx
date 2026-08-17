@@ -11,6 +11,7 @@ import Spinner from "./components/ui/Spinner";
 // blocks the others.
 import LoginPage from "./features/auth/LoginPage";
 import RegisterPage from "./features/auth/RegisterPage";
+import VerifyEmailPage from "./features/auth/VerifyEmailPage";
 
 const FeedPage = lazy(() => import("./features/feed/FeedPage"));
 const PostDetailPage = lazy(() => import("./features/feed/PostDetailPage"));
@@ -51,6 +52,7 @@ export default function App() {
 				<Routes location={background || location}>
 					<Route path="/login" element={<LoginPage />} />
 					<Route path="/register" element={<RegisterPage />} />
+					<Route path="/verify-email" element={<VerifyEmailPage />} />
 
 					{/* Chính sách là tài liệu tĩnh và nằm NGOÀI ProtectedRoute: người
 					    chưa đăng nhập, và nhất là người đang bị hạn chế tài khoản,

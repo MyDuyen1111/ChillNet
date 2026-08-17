@@ -71,8 +71,14 @@ export default function RegisterPage() {
 				email: form.email.trim(),
 				password: form.password,
 			});
-			toast.success("Tạo tài khoản thành công! Hãy đăng nhập.");
-			navigate("/login", { replace: true });
+			toast.success("Mã xác minh đã được gửi đến email của bạn.");
+			navigate("/verify-email", {
+				replace: true,
+				state: {
+					email: form.email.trim(),
+					username: form.username.trim(),
+				},
+			});
 		} catch (err) {
 			setErrors({ form: err.message || "Đăng ký thất bại." });
 		} finally {

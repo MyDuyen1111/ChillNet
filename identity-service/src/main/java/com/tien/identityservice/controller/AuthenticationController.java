@@ -48,14 +48,14 @@ public class AuthenticationController {
     }
 
     @PostMapping("/verify-user")
-    public ApiResponse<Void> verifyUser(@RequestBody VerifyUserRequest request) {
+    public ApiResponse<Void> verifyUser(@RequestBody @Valid VerifyUserRequest request) {
         log.info("Đang xác thực OTP cho email: {}", request.getEmail());
         authenticationService.verifyUser(request);
         return ApiResponse.<Void>builder().build();
     }
 
     @PostMapping("/resend-verification")
-    public ApiResponse<Void> resendVerificationCode(@RequestBody ResendOtpRequest request) {
+    public ApiResponse<Void> resendVerificationCode(@RequestBody @Valid ResendOtpRequest request) {
         authenticationService.resendVerificationCode(request.getEmail());
         return ApiResponse.<Void>builder().build();
     }

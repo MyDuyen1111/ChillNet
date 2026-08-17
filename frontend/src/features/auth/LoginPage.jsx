@@ -6,12 +6,17 @@ import AuthButton from "./AuthButton";
 import AuthField from "./AuthField";
 import AuthLayout from "./AuthLayout";
 
+const EMAIL_NOT_VERIFIED_CODE = 1307;
+
 export default function LoginPage() {
 	const { login, isAuthenticated, booting } = useAuth();
 	const toast = useToast();
 	const navigate = useNavigate();
 	const location = useLocation();
-	const [form, setForm] = useState({ username: "", password: "" });
+	const [form, setForm] = useState(() => ({
+		username: location.state?.username || "",
+		password: "",
+	}));
 	const [error, setError] = useState("");
 	const [loading, setLoading] = useState(false);
 
@@ -33,6 +38,16 @@ export default function LoginPage() {
 			toast.success("Chào mừng trở lại!");
 			navigate(location.state?.from?.pathname || "/feed", { replace: true });
 		} catch (err) {
+			if (err.code === EMAIL_NOT_VERIFIED_CODE) {
+				navigate("/verify-email", {
+					state: {
+						email: form.username.includes("@") ? form.username.trim() : "",
+						username: form.username.trim(),
+						from: location.state?.from,
+					},
+				});
+				return;
+			}
 			setError(err.message || "Đăng nhập thất bại.");
 		} finally {
 			setLoading(false);
@@ -68,6 +83,12 @@ export default function LoginPage() {
 					Đăng nhập
 				</AuthButton>
 			</form>
+			<p className="mt-4 text-center text-sm text-muted">
+				Chưa xác minh tài khoản?{" "}
+				<Link to="/verify-email" className="font-semibold text-accent hover:underline">
+					Nhập mã OTP
+				</Link>
+			</p>
 
 			<div aria-hidden className="my-7 h-px bg-line" />
 

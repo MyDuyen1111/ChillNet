@@ -3,6 +3,7 @@ package com.tien.identityservice.service;
 import java.text.ParseException;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.Locale;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -98,9 +99,8 @@ public class AuthenticationService {
     // Xác thực email bằng OTP, kích hoạt tài khoản
     @Transactional
     public void verifyUser(VerifyUserRequest verifyUserRequest) {
-        User user = userRepository
-                .findByEmail(verifyUserRequest.getEmail())
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        String email = verifyUserRequest.getEmail().trim().toLowerCase(Locale.ROOT);
+        User user = userRepository.findByEmail(email).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         UserOtp userOtp = otpService.findLatestOtp(user, OtpType.REGISTER);
         otpService.validateOtp(userOtp, verifyUserRequest.getOtpCode());
@@ -112,13 +112,16 @@ public class AuthenticationService {
         otpService.markOtpAsUsed(userOtp);
 
         notificationService.sendEmail(
-                verifyUserRequest.getEmail(), "Welcome to ChillNet", EmailTemplate.welcomeEmail(user.getUsername()));
+                user.getEmail(), "Welcome to ChillNet", EmailTemplate.welcomeEmail(user.getUsername()));
     }
 
     // Gửi lại mã OTP xác thực
     @Transactional
     public void resendVerificationCode(String email) {
-        User user = userRepository.findByEmail(email).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+        User user = userRepository
+                .findByEmail(normalizedEmail)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
         if (user.getIsActive() && user.isEmailVerified()) {
             throw new AppException(ErrorCode.USER_ALREADY_VERIFIED);
         }
@@ -142,8 +145,11 @@ public class AuthenticationService {
 
     // Xác thực username/password, trả về JWT token.
     public AuthenticationResponse authenticate(AuthenticationRequest request) {
-        User user = userRepository
-                .findByUsernameWithRolesAndPermissions(request.getUsername())
+        String identifier =
+                request.getUsername() == null ? "" : request.getUsername().trim();
+        User user = (identifier.contains("@")
+                        ? userRepository.findByEmailWithRolesAndPermissions(identifier.toLowerCase(Locale.ROOT))
+                        : userRepository.findByUsernameWithRolesAndPermissions(identifier))
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         boolean authenticated = passwordEncoder.matches(request.getPassword(), user.getPassword());
@@ -153,6 +159,9 @@ public class AuthenticationService {
         }
 
         if (!user.getIsActive()) {
+            if (!user.isEmailVerified()) {
+                throw new AppException(ErrorCode.EMAIL_NOT_VERIFIED);
+            }
             throw new AppException(ErrorCode.USER_DISABLED);
         }
 
