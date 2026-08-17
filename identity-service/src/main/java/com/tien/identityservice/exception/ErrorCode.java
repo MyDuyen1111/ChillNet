@@ -17,7 +17,10 @@ public enum ErrorCode {
 
     UNAUTHENTICATED(1201, "Chưa xác thực", HttpStatus.UNAUTHORIZED),
     UNAUTHORIZED(1202, "Bạn không có quyền truy cập", HttpStatus.FORBIDDEN),
-    INVALID_PASSWORD(1203, "Mật khẩu phải có ít nhất {min} ký tự", HttpStatus.BAD_REQUEST),
+    INVALID_PASSWORD(
+            1203,
+            "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ thường, chữ in hoa, chữ số và ký tự đặc biệt",
+            HttpStatus.BAD_REQUEST),
     USERNAME_INVALID(1204, "Tên người dùng phải có ít nhất {min} ký tự", HttpStatus.BAD_REQUEST),
     INVALID_OLD_PASSWORD(1205, "Mật khẩu cũ không đúng", HttpStatus.BAD_REQUEST),
     WRONG_PASSWORD(1206, "Mật khẩu không đúng", HttpStatus.BAD_REQUEST),
@@ -26,6 +29,8 @@ public enum ErrorCode {
     INVALID_EMAIL(1302, "Địa chỉ email không hợp lệ", HttpStatus.BAD_REQUEST),
     EMAIL_IS_REQUIRED(1303, "Email là bắt buộc", HttpStatus.BAD_REQUEST),
     EMAIL_EXISTED(1304, "Email đã tồn tại", HttpStatus.BAD_REQUEST),
+    FIRST_NAME_REQUIRED(1305, "Họ là bắt buộc", HttpStatus.BAD_REQUEST),
+    LAST_NAME_REQUIRED(1306, "Tên là bắt buộc", HttpStatus.BAD_REQUEST),
 
     OTP_NOT_FOUND(1401, "Không tìm thấy mã OTP", HttpStatus.NOT_FOUND),
     OTP_EXPIRED(1402, "Mã OTP đã hết hạn", HttpStatus.BAD_REQUEST),

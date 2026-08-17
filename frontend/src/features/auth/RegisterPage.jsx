@@ -12,7 +12,14 @@ const EMPTY = {
 	username: "",
 	email: "",
 	password: "",
+	confirmPassword: "",
 };
+
+const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const PASSWORD_PATTERN =
+	/^(?=.*\p{Ll})(?=.*\p{Lu})(?=.*\d)(?=.*[^\p{L}\p{N}\s])\S{8,}$/u;
+const PASSWORD_ERROR =
+	"Mật khẩu phải có ít nhất 8 ký tự, gồm chữ thường, chữ in hoa, chữ số và ký tự đặc biệt.";
 
 export default function RegisterPage() {
 	const { register } = useAuth();
@@ -22,13 +29,32 @@ export default function RegisterPage() {
 	const [errors, setErrors] = useState({});
 	const [loading, setLoading] = useState(false);
 
-	const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+	const onChange = (e) => {
+		const { name, value } = e.target;
+		setForm((current) => ({ ...current, [name]: value }));
+		setErrors((current) => {
+			if (!current[name] && !current.form) return current;
+			const next = { ...current };
+			delete next[name];
+			delete next.form;
+			return next;
+		});
+	};
 
 	const validate = () => {
 		const next = {};
-		if (form.username.trim().length < 3) next.username = "Tối thiểu 3 ký tự.";
-		if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) next.email = "Email không hợp lệ.";
-		if (form.password.length < 8) next.password = "Mật khẩu tối thiểu 8 ký tự.";
+		if (!form.firstName.trim()) next.firstName = "Vui lòng nhập Họ.";
+		if (!form.lastName.trim()) next.lastName = "Vui lòng nhập Tên.";
+		if (form.username.trim().length < 4) next.username = "Tối thiểu 4 ký tự.";
+		if (!EMAIL_PATTERN.test(form.email.trim())) {
+			next.email = "Email không hợp lệ (ví dụ: ten@example.com).";
+		}
+		if (!PASSWORD_PATTERN.test(form.password)) next.password = PASSWORD_ERROR;
+		if (!form.confirmPassword) {
+			next.confirmPassword = "Vui lòng xác nhận mật khẩu.";
+		} else if (form.confirmPassword !== form.password) {
+			next.confirmPassword = "Mật khẩu xác nhận không khớp.";
+		}
 		setErrors(next);
 		return Object.keys(next).length === 0;
 	};
@@ -38,7 +64,13 @@ export default function RegisterPage() {
 		if (!validate()) return;
 		setLoading(true);
 		try {
-			await register(form);
+			await register({
+				firstName: form.firstName.trim(),
+				lastName: form.lastName.trim(),
+				username: form.username.trim(),
+				email: form.email.trim(),
+				password: form.password,
+			});
 			toast.success("Tạo tài khoản thành công! Hãy đăng nhập.");
 			navigate("/login", { replace: true });
 		} catch (err) {
@@ -55,23 +87,27 @@ export default function RegisterPage() {
 				Đăng ký để xem ảnh và video từ bạn bè.
 			</p>
 
-			<form onSubmit={onSubmit} className="flex flex-col gap-2.5">
+			<form onSubmit={onSubmit} className="flex flex-col gap-2.5" noValidate>
 				<div className="grid grid-cols-2 gap-2.5">
 					<AuthField
 						name="firstName"
 						value={form.firstName}
 						onChange={onChange}
 						placeholder="Họ"
-						autoComplete="given-name"
+						autoComplete="family-name"
 						aria-label="Họ"
+						error={errors.firstName}
+						required
 					/>
 					<AuthField
 						name="lastName"
 						value={form.lastName}
 						onChange={onChange}
 						placeholder="Tên"
-						autoComplete="family-name"
+						autoComplete="given-name"
 						aria-label="Tên"
+						error={errors.lastName}
+						required
 					/>
 				</div>
 				<AuthField
@@ -103,9 +139,21 @@ export default function RegisterPage() {
 					placeholder="Mật khẩu"
 					autoComplete="new-password"
 					aria-label="Mật khẩu"
-					error={errors.password || errors.form}
+					error={errors.password}
 					required
 				/>
+				<AuthField
+					name="confirmPassword"
+					type="password"
+					value={form.confirmPassword}
+					onChange={onChange}
+					placeholder="Xác nhận mật khẩu"
+					autoComplete="new-password"
+					aria-label="Xác nhận mật khẩu"
+					error={errors.confirmPassword}
+					required
+				/>
+				{errors.form && <p className="px-1 text-xs text-like">{errors.form}</p>}
 				<AuthButton type="submit" className="mt-3" loading={loading}>
 					Đăng ký
 				</AuthButton>
