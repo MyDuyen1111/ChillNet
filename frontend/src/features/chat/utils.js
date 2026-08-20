@@ -114,14 +114,29 @@ export function reconcileMessage(list, incoming, userId) {
 	return [...list, normalized];
 }
 
-// When polling replaces the thread with the authoritative server list, keep any
-// still-unconfirmed optimistic messages so they do not flicker out mid-send.
+// Hợp nhất trang tin mới nhất từ server vào danh sách đang hiển thị.
+//
+// Từ khi luồng chat dùng /messages/paginated, `serverAsc` chỉ là TRANG ĐẦU
+// (những tin mới nhất) — nếu thay thế cả danh sách như trước thì mọi tin cũ đã
+// tải thêm sẽ biến mất mỗi lần polling chạy. Vì vậy: hợp nhất theo id, giữ
+// nguyên tin cũ, và giữ lại tin optimistic chưa được server xác nhận.
+//
+// Hệ quả có ý thức: tin do người khác xoá sẽ không tự biến mất, vì "không có
+// trong trang này" và "đã bị xoá" là hai chuyện không phân biệt được ở đây.
 export function mergeAuthoritative(prev, serverAsc) {
-	const pending = prev.filter((m) => m.pending);
-	if (!pending.length) return serverAsc;
+	const server = new Map(serverAsc.map((m) => [m.id, m]));
 	const confirmedMine = new Set(serverAsc.filter((m) => m.me).map((m) => m.message));
-	const stillPending = pending.filter((p) => !confirmedMine.has(p.message));
-	return [...serverAsc, ...stillPending];
+
+	const merged = prev
+		.filter((m) => !(m.pending && confirmedMine.has(m.message)))
+		.map((m) => (m.pending ? m : (server.get(m.id) ?? m)));
+
+	const known = new Set(merged.map((m) => m.id));
+	const added = serverAsc.filter((m) => !known.has(m.id));
+
+	return [...merged, ...added].sort(
+		(a, b) => new Date(a.createdDate || 0) - new Date(b.createdDate || 0),
+	);
 }
 
 // A locally-created message shown immediately while the send is in flight.

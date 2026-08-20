@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChatsCircle } from "@phosphor-icons/react";
 import { EmptyState, useToast } from "../../components/ui";
@@ -16,6 +16,10 @@ import {
 } from "./utils";
 import ConversationList from "./components/ConversationList";
 import ChatWindow from "./components/ChatWindow";
+import NewConversationModal from "./components/NewConversationModal";
+
+// Trang tin nhắn mới nhất tải lần đầu; tin cũ hơn nạp theo yêu cầu.
+const PAGE_SIZE = 30;
 
 export default function ChatPage() {
 	const { conversationId } = useParams();
@@ -35,7 +39,15 @@ export default function ChatPage() {
 	const [messages, setMessages] = useState([]);
 	const [msgLoading, setMsgLoading] = useState(false);
 	const [msgError, setMsgError] = useState(null);
+	const [msgPage, setMsgPage] = useState(1);
+	const [hasOlder, setHasOlder] = useState(false);
+	const [loadingOlder, setLoadingOlder] = useState(false);
 	const [directConv, setDirectConv] = useState(null);
+	const [composeOpen, setComposeOpen] = useState(false);
+	const realtimeIdsRef = useRef(new Set());
+	const conversationLoadsRef = useRef(new Set());
+	const conversationsRef = useRef(conversations);
+	conversationsRef.current = conversations;
 
 	// Fetch a conversation opened via deep link before the list has loaded it.
 	useEffect(() => {
@@ -59,16 +71,25 @@ export default function ChatPage() {
 		(directConv?.id === conversationId ? directConv : null);
 
 	// Load the thread whenever the active conversation changes.
+	//
+	// Dùng /messages/paginated thay vì /messages: endpoint không phân trang trả
+	// về TOÀN BỘ lịch sử hội thoại trong một lượt, nên một cuộc trò chuyện dài
+	// khiến lần mở đầu tiên tải hàng nghìn tin. Ở đây chỉ lấy trang mới nhất,
+	// tin cũ hơn nạp theo yêu cầu.
 	const loadMessages = useCallback(
-		(cid) =>
+		(cid, page = 1) =>
 			api
-				.get(endpoints.chat.messages, { params: { conversationId: cid } })
-				.then((list) =>
-					(Array.isArray(list) ? list : [])
+				.get(endpoints.chat.messagesPaginated, {
+					params: { conversationId: cid, page, size: PAGE_SIZE },
+				})
+				.then((res) => ({
+					// data là mới-nhất-trước; giao diện render cũ-trước.
+					asc: (res?.data ?? res?.content ?? [])
 						.slice()
-						.reverse() // getMessages is newest-first; we render oldest-first.
+						.reverse()
 						.map((m) => normalizeMessage(m, userId)),
-				),
+					hasOlder: page < (res?.totalPages ?? 1),
+				})),
 		[userId],
 	);
 
@@ -80,10 +101,13 @@ export default function ChatPage() {
 		let alive = true;
 		setMsgLoading(true);
 		setMsgError(null);
+		setMsgPage(1);
+		setHasOlder(false);
 		loadMessages(conversationId)
-			.then((asc) => {
+			.then(({ asc, hasOlder: more }) => {
 				if (!alive) return;
 				setMessages(asc);
+				setHasOlder(more);
 				// Best-effort mark-as-read for the latest incoming message + clear badge.
 				const incoming = asc.filter((m) => !m.me && !m.pending);
 				const latest = incoming[incoming.length - 1];
@@ -113,19 +137,42 @@ export default function ChatPage() {
 			) {
 				return;
 			}
+			if (body.id && realtimeIdsRef.current.has(body.id)) return;
+			if (body.id) realtimeIdsRef.current.add(body.id);
 			const msg = normalizeMessage(body, userId);
+			const isActive = cid === conversationId;
+			const preview = {
+				lastMessage: msg.message,
+				lastMessageMine: msg.me,
+				lastMessageAt: msg.createdDate || new Date().toISOString(),
+				unread: isActive || msg.me ? 0 : 1,
+			};
+
+			if (
+				!conversationsRef.current.some((conversation) => conversation.id === cid) &&
+				!conversationLoadsRef.current.has(cid)
+			) {
+				conversationLoadsRef.current.add(cid);
+				api
+					.get(endpoints.chat.conversationById(cid))
+					.then((conversation) => {
+						setConversations((prev) => {
+							if (prev.some((item) => item.id === cid)) return prev;
+							return [{ ...conversation, ...preview }, ...prev];
+						});
+					})
+					.catch(() => {})
+					.finally(() => conversationLoadsRef.current.delete(cid));
+			}
 
 			setConversations((prev) => {
 				let found = false;
 				const next = prev.map((c) => {
 					if (c.id !== cid) return c;
 					found = true;
-					const isActive = cid === conversationId;
 					return {
 						...c,
-						lastMessage: msg.message,
-						lastMessageMine: msg.me,
-						lastMessageAt: msg.createdDate || new Date().toISOString(),
+						...preview,
 						unread: isActive || msg.me ? 0 : (c.unread ?? 0) + 1,
 					};
 				});
@@ -147,9 +194,7 @@ export default function ChatPage() {
 		[conversationId, userId, setConversations],
 	);
 
-	const conversationIds = conversations.map((c) => c.id);
-	const { connected, sendMessage } = useChatSocket({
-		conversationIds,
+	const { connected } = useChatSocket({
 		onMessage: handleSocketMessage,
 	});
 
@@ -158,7 +203,7 @@ export default function ChatPage() {
 		if (!conversationId || connected) return undefined;
 		const id = setInterval(() => {
 			loadMessages(conversationId)
-				.then((asc) => setMessages((prev) => mergeAuthoritative(prev, asc)))
+				.then(({ asc }) => setMessages((prev) => mergeAuthoritative(prev, asc)))
 				.catch(() => {});
 		}, 3000);
 		return () => clearInterval(id);
@@ -200,11 +245,8 @@ export default function ChatPage() {
 			setMessages((prev) => [...prev, optimistic]);
 			bumpPreview(conversationId, text);
 
-			// Prefer WebSocket; the server echoes the message back on the topic and
-			// reconcileMessage swaps the optimistic copy for the real one.
-			if (connected && sendMessage(conversationId, text)) return;
-
-			// Socket unavailable: persist over REST and reconcile with the response.
+			// REST gives the sender a reliable acknowledgement; the backend also
+			// pushes the saved message to every participant's private WebSocket queue.
 			try {
 				const saved = await api.post(endpoints.chat.messages, {
 					conversationId,
@@ -218,8 +260,84 @@ export default function ChatPage() {
 				toast.error(e.message || "Gửi tin nhắn thất bại.");
 			}
 		},
-		[conversationId, userId, meProfile, connected, sendMessage, bumpPreview, toast],
+		[conversationId, userId, meProfile, bumpPreview, toast],
 	);
+
+	// Sửa / xoá tin nhắn. Cập nhật ngay danh sách đang mở; các máy khác nhận được
+	// qua lần tải lại kế tiếp — chat-service không phát sự kiện sửa/xoá lên
+	// WebSocket, chỉ phát tin mới.
+	const handleEditMessage = useCallback(
+		async (message, text) => {
+			try {
+				const updated = await api.put(endpoints.chat.messageById(message.id), {
+					message: text,
+				});
+				const normalized = normalizeMessage(updated, userId);
+				setMessages((prev) => prev.map((m) => (m.id === message.id ? normalized : m)));
+				setConversations((prev) =>
+					prev.map((c) =>
+						c.id === message.conversationId && c.lastMessage === message.message
+							? { ...c, lastMessage: normalized.message }
+							: c,
+					),
+				);
+			} catch (e) {
+				toast.error(e.message || "Không sửa được tin nhắn.");
+				throw e;
+			}
+		},
+		[userId, setConversations, toast],
+	);
+
+	const handleDeleteMessage = useCallback(
+		async (message) => {
+			try {
+				await api.delete(endpoints.chat.messageById(message.id));
+				setMessages((prev) => prev.filter((m) => m.id !== message.id));
+			} catch (e) {
+				toast.error(e.message || "Không xoá được tin nhắn.");
+			}
+		},
+		[toast],
+	);
+
+	// Đổi tên / thêm / xoá thành viên đều trả về ConversationResponse mới.
+	const handleConversationUpdated = useCallback(
+		(updated) => {
+			if (!updated?.id) return;
+			setDirectConv((cur) => (cur?.id === updated.id ? { ...cur, ...updated } : cur));
+			setConversations((prev) =>
+				prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)),
+			);
+		},
+		[setConversations],
+	);
+
+	// Rời / xoá hội thoại: gỡ khỏi danh sách rồi quay về hộp thư.
+	const handleConversationGone = useCallback(() => {
+		setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+		setDirectConv(null);
+		navigate("/messages", { replace: true });
+	}, [conversationId, setConversations, navigate]);
+
+	const handleLoadOlder = useCallback(async () => {
+		if (!conversationId || loadingOlder || !hasOlder) return;
+		setLoadingOlder(true);
+		try {
+			const next = msgPage + 1;
+			const { asc, hasOlder: more } = await loadMessages(conversationId, next);
+			setMessages((prev) => {
+				const known = new Set(prev.map((m) => m.id));
+				return [...asc.filter((m) => !known.has(m.id)), ...prev];
+			});
+			setMsgPage(next);
+			setHasOlder(more);
+		} catch (e) {
+			toast.error(e.message || "Không tải được tin nhắn cũ.");
+		} finally {
+			setLoadingOlder(false);
+		}
+	}, [conversationId, loadingOlder, hasOlder, msgPage, loadMessages, toast]);
 
 	const onSelect = useCallback(
 		(id) => navigate(`/messages/${id}`),
@@ -244,6 +362,7 @@ export default function ChatPage() {
 					currentUserId={userId}
 					onSelect={onSelect}
 					onRetry={reloadConversations}
+					onCompose={() => setComposeOpen(true)}
 				/>
 			</div>
 
@@ -269,12 +388,21 @@ export default function ChatPage() {
 						onBack={onBack}
 						onRetry={() =>
 							loadMessages(conversationId)
-								.then((asc) => {
+								.then(({ asc, hasOlder: more }) => {
 									setMsgError(null);
 									setMessages(asc);
+									setMsgPage(1);
+									setHasOlder(more);
 								})
 								.catch((e) => setMsgError(e.message))
 						}
+						hasOlder={hasOlder}
+						loadingOlder={loadingOlder}
+						onLoadOlder={handleLoadOlder}
+						onEditMessage={handleEditMessage}
+						onDeleteMessage={handleDeleteMessage}
+						onConversationUpdated={handleConversationUpdated}
+						onConversationGone={handleConversationGone}
 					/>
 				) : (
 					<EmptyState
@@ -284,6 +412,20 @@ export default function ChatPage() {
 					/>
 				)}
 			</div>
+
+			<NewConversationModal
+				open={composeOpen}
+				onClose={() => setComposeOpen(false)}
+				onCreated={(conversation) => {
+					setComposeOpen(false);
+					// DIRECT đã tồn tại sẽ được trả lại nguyên bản, nên chỉ thêm vào
+					// danh sách khi thật sự chưa có.
+					setConversations((prev) =>
+						prev.some((c) => c.id === conversation.id) ? prev : [conversation, ...prev],
+					);
+					navigate(`/messages/${conversation.id}`);
+				}}
+			/>
 		</div>
 	);
 }

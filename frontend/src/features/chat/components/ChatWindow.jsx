@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
 	CaretLeft,
@@ -13,6 +13,7 @@ import {
 	Button,
 	EmptyState,
 	IconButton,
+	Modal,
 	Skeleton,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
@@ -24,6 +25,7 @@ import {
 	otherParticipant,
 } from "../utils";
 import MessageBubble from "./MessageBubble";
+import ConversationInfoModal from "./ConversationInfoModal";
 import Composer from "./Composer";
 
 // Two consecutive messages this far apart (ms) get their own time divider.
@@ -105,19 +107,40 @@ export default function ChatWindow({
 	onSend,
 	onBack,
 	onRetry,
+	onEditMessage,
+	onDeleteMessage,
+	onConversationUpdated,
+	onConversationGone,
+	hasOlder = false,
+	loadingOlder = false,
+	onLoadOlder,
 }) {
 	const scrollRef = useRef(null);
+	const [infoOpen, setInfoOpen] = useState(false);
+	// Một modal xác nhận dùng chung cho cả luồng, thay vì mỗi bong bóng tự dựng
+	// một portal riêng.
+	const [pendingDelete, setPendingDelete] = useState(null);
+	const [deleting, setDeleting] = useState(false);
 	const title = conversation
 		? conversationTitle(conversation, currentUserId)
 		: "Đang tải...";
 	const group = isGroup(conversation);
 	const otherUser = otherParticipant(conversation, currentUserId);
+	// Admin của hội thoại xoá được tin của người khác (validateDeletePermission).
+	const iAmAdmin =
+		!group ||
+		(conversation?.participants ?? []).some(
+			(p) => p.userId === currentUserId && p.role === "ADMIN",
+		);
 
-	// Stick to the bottom as new messages arrive (and on first load).
+	// Bám đáy khi có tin mới (và lúc mới mở). Cố tình theo dõi id của tin CUỐI
+	// chứ không phải messages.length: nạp thêm tin cũ cũng làm length tăng, và
+	// nếu cuộn xuống đáy lúc đó thì người dùng bị ném khỏi chỗ đang đọc.
+	const lastId = messages[messages.length - 1]?.id;
 	useEffect(() => {
 		const el = scrollRef.current;
 		if (el) el.scrollTop = el.scrollHeight;
-	}, [messages.length, loading, conversationId]);
+	}, [lastId, loading, conversationId]);
 
 	return (
 		<div className="flex h-full min-w-0 flex-col">
@@ -139,7 +162,7 @@ export default function ChatWindow({
 				<IconButton label="Gọi video">
 					<VideoCamera size={24} />
 				</IconButton>
-				<IconButton label="Thông tin cuộc trò chuyện">
+				<IconButton label="Thông tin cuộc trò chuyện" onClick={() => setInfoOpen(true)}>
 					<Info size={24} />
 				</IconButton>
 			</div>
@@ -164,12 +187,29 @@ export default function ChatWindow({
 					/>
 				) : (
 					<>
-						<ThreadIntro
-							conversation={conversation}
-							title={title}
-							group={group}
-							otherUser={otherUser}
-						/>
+						{hasOlder && (
+							<div className="flex justify-center pb-4">
+								<Button
+									variant="secondary"
+									size="sm"
+									loading={loadingOlder}
+									onClick={onLoadOlder}
+								>
+									Xem tin nhắn cũ hơn
+								</Button>
+							</div>
+						)}
+
+						{/* Phần giới thiệu đầu luồng chỉ đúng khi đã ở đầu thật sự;
+						    còn tin cũ chưa nạp thì nó là lời nói dối về vị trí. */}
+						{!hasOlder && (
+							<ThreadIntro
+								conversation={conversation}
+								title={title}
+								group={group}
+								otherUser={otherUser}
+							/>
+						)}
 
 						{messages.length === 0 ? (
 							<EmptyState
@@ -199,6 +239,9 @@ export default function ChatWindow({
 											group={group}
 											showName={!sameAsPrev || showDivider}
 											showAvatar={!sameAsNext}
+											canDelete={iAmAdmin}
+											onEdit={onEditMessage}
+											onDeleteRequest={setPendingDelete}
 										/>
 									</Fragment>
 								);
@@ -210,6 +253,50 @@ export default function ChatWindow({
 
 			{/* Composer */}
 			<Composer onSend={onSend} disabled={!conversationId} />
+
+			<ConversationInfoModal
+				open={infoOpen}
+				onClose={() => setInfoOpen(false)}
+				conversation={conversation}
+				currentUserId={currentUserId}
+				onUpdated={onConversationUpdated}
+				onGone={() => {
+					setInfoOpen(false);
+					onConversationGone?.();
+				}}
+			/>
+
+			<Modal
+				open={!!pendingDelete}
+				onClose={() => !deleting && setPendingDelete(null)}
+				title="Xoá tin nhắn"
+				size="sm"
+			>
+				<p className="text-sm text-muted">
+					Tin nhắn sẽ bị xoá vĩnh viễn với mọi người trong cuộc trò chuyện.
+				</p>
+				<div className="mt-5 flex justify-end gap-2">
+					<Button variant="ghost" size="sm" onClick={() => setPendingDelete(null)} disabled={deleting}>
+						Huỷ
+					</Button>
+					<Button
+						variant="danger"
+						size="sm"
+						loading={deleting}
+						onClick={async () => {
+							setDeleting(true);
+							try {
+								await onDeleteMessage?.(pendingDelete);
+								setPendingDelete(null);
+							} finally {
+								setDeleting(false);
+							}
+						}}
+					>
+						Xoá
+					</Button>
+				</div>
+			</Modal>
 		</div>
 	);
 }

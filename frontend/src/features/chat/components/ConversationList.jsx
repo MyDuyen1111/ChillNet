@@ -64,6 +64,7 @@ export default function ConversationList({
 	currentUserId,
 	onSelect,
 	onRetry,
+	onCompose,
 }) {
 	const { user } = useAuth();
 	const myName = displayName(user?.profile);
@@ -75,7 +76,7 @@ export default function ConversationList({
 					<span className="text-base font-semibold text-ink">{myName}</span>
 					<CaretDown size={14} className="text-ink" />
 				</button>
-				<IconButton label="Soạn tin mới">
+				<IconButton label="Soạn tin mới" onClick={onCompose}>
 					<NotePencil size={24} />
 				</IconButton>
 			</div>
