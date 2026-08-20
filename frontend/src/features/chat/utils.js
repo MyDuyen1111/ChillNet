@@ -157,3 +157,17 @@ export function makeOptimisticMessage(text, userId, profile, conversationId) {
 		createdDate: new Date().toISOString(),
 	};
 }
+
+// Id của tin nhắn cuối cùng do chính mình gửi và đã được server xác nhận.
+//
+// Dòng "Đã xem" chỉ bám vào đúng tin này. Mỗi tin muốn biết trạng thái đã xem
+// là một lượt GET /messages/{id}/read-receipts, nên gắn cho mọi bong bóng sẽ
+// biến một lần mở hội thoại thành hàng chục request. Tin optimistic bị loại vì
+// id "temp-..." của nó chưa tồn tại ở backend.
+export function lastOwnMessageId(messages) {
+	for (let i = (messages?.length ?? 0) - 1; i >= 0; i -= 1) {
+		const m = messages[i];
+		if (m?.me && !m.pending && m.id) return m.id;
+	}
+	return null;
+}

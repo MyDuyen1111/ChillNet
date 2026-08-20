@@ -22,9 +22,11 @@ import {
 	conversationTitle,
 	formatDivider,
 	isGroup,
+	lastOwnMessageId,
 	otherParticipant,
 } from "../utils";
 import MessageBubble from "./MessageBubble";
+import ReadReceiptStatus from "./ReadReceiptStatus";
 import ConversationInfoModal from "./ConversationInfoModal";
 import Composer from "./Composer";
 
@@ -142,6 +144,11 @@ export default function ChatWindow({
 		if (el) el.scrollTop = el.scrollHeight;
 	}, [lastId, loading, conversationId]);
 
+	// Trạng thái "đã xem" chỉ gắn dưới tin cuối của mình. `lastId` được truyền
+	// xuống làm mốc làm mới: có tin mới trong luồng là hỏi lại một lượt — người
+	// vừa trả lời thì chắc chắn đã đọc.
+	const ownLastId = lastOwnMessageId(messages);
+
 	return (
 		<div className="flex h-full min-w-0 flex-col">
 			{/* Header */}
@@ -243,6 +250,14 @@ export default function ChatWindow({
 											onEdit={onEditMessage}
 											onDeleteRequest={setPendingDelete}
 										/>
+										{m.id === ownLastId && (
+											<ReadReceiptStatus
+												message={m}
+												conversation={conversation}
+												currentUserId={currentUserId}
+												refreshKey={lastId}
+											/>
+										)}
 									</Fragment>
 								);
 							})
