@@ -9,27 +9,34 @@ import { cn } from "../../lib/cn";
  */
 export default function Tabs({ items, value, onChange, className }) {
 	return (
-		<div className={cn("flex items-center justify-center gap-10 border-t border-line", className)}>
-			{items.map(({ key, label, icon: Icon }) => {
-				const active = key === value;
-				return (
-					<button
-						key={key}
-						type="button"
-						onClick={() => onChange?.(key)}
-						aria-current={active ? "page" : undefined}
-						className={cn(
-							"-mt-px flex items-center gap-1.5 border-t px-1 py-4 text-[12px] font-semibold uppercase tracking-[1px] transition-colors",
-							active
-								? "border-ink text-ink"
-								: "border-transparent text-muted hover:text-ink",
-						)}
-					>
-						{Icon && <Icon size={12} weight={active ? "fill" : "regular"} />}
-						{label}
-					</button>
-				);
-			})}
+		// Hai lớp thay vì một: lớp ngoài giữ đường kẻ và cho cuộn ngang, lớp trong
+		// `w-max mx-auto` để dải tab vẫn nằm giữa khi vừa khung nhưng KHÔNG bị cắt
+		// mất tab đầu tiên khi tràn. `justify-center` cộng `overflow-x-auto` trên
+		// cùng một thẻ sẽ cắt cả hai đầu — trang cá nhân có 4 tab nên trên điện
+		// thoại hẹp là tràn thật, không phải giả định.
+		<div className={cn("overflow-x-auto border-t border-line", className)}>
+			<div className="mx-auto flex w-max items-center gap-6 px-4 sm:gap-10">
+				{items.map(({ key, label, icon: Icon }) => {
+					const active = key === value;
+					return (
+						<button
+							key={key}
+							type="button"
+							onClick={() => onChange?.(key)}
+							aria-current={active ? "page" : undefined}
+							className={cn(
+								"-mt-px flex shrink-0 items-center gap-1.5 border-t px-1 py-4 text-[12px] font-semibold uppercase tracking-[1px] transition-colors",
+								active
+									? "border-ink text-ink"
+									: "border-transparent text-muted hover:text-ink",
+							)}
+						>
+							{Icon && <Icon size={12} weight={active ? "fill" : "regular"} />}
+							{label}
+						</button>
+					);
+				})}
+			</div>
 		</div>
 	);
 }

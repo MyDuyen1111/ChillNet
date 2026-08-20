@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
+	ArrowsClockwise,
 	BookmarkSimple,
 	IdentificationCard,
 	SquaresFour,
@@ -15,21 +16,30 @@ import EditProfileModal from "./components/EditProfileModal";
 import PostsTab from "./components/PostsTab";
 import AboutTab from "./components/AboutTab";
 
-// Tab "Đã lưu" chỉ hiện trên trang của chính mình: GET /post/saved-posts luôn
-// trả về bài đã lưu của người đang đăng nhập, không nhận userId, nên hiển thị nó
-// ở trang người khác sẽ là một lời nói dối.
+// Hai tab "Đã lưu" và "Đã chia sẻ" chỉ hiện trên trang của chính mình: cả
+// GET /post/saved-posts lẫn GET /post/my-shared-posts đều lấy theo người đang
+// đăng nhập, không nhận userId, nên hiển thị chúng ở trang người khác sẽ là một
+// lời nói dối.
 const BASE_TABS = [
 	{ key: "posts", label: "Bài viết", icon: SquaresFour },
 	{ key: "about", label: "Giới thiệu", icon: IdentificationCard },
 ];
 
 const SAVED_TAB = { key: "saved", label: "Đã lưu", icon: BookmarkSimple };
+const SHARED_TAB = { key: "shared", label: "Đã chia sẻ", icon: ArrowsClockwise };
 
 const SAVED_EMPTY = {
 	icon: BookmarkSimple,
 	title: "Chưa có bài viết nào được lưu",
 	description:
 		"Nhấn biểu tượng dấu trang trên một bài viết để lưu lại. Chỉ mình bạn thấy danh sách này.",
+};
+
+const SHARED_EMPTY = {
+	icon: ArrowsClockwise,
+	title: "Chưa chia sẻ bài viết nào",
+	description:
+		"Bài bạn đăng lại từ người khác sẽ gom về đây. Chúng vẫn xuất hiện trong tab Bài viết.",
 };
 
 function HeaderSkeleton() {
@@ -173,7 +183,11 @@ export default function ProfilePage() {
 
 			<div className="mt-8">
 				<Tabs
-					items={isSelf ? [BASE_TABS[0], SAVED_TAB, BASE_TABS[1]] : BASE_TABS}
+					items={
+						isSelf
+							? [BASE_TABS[0], SAVED_TAB, SHARED_TAB, BASE_TABS[1]]
+							: BASE_TABS
+					}
 					value={tab}
 					onChange={setTab}
 				/>
@@ -189,6 +203,14 @@ export default function ProfilePage() {
 						isSelf
 						url={endpoints.post.savedPosts}
 						empty={SAVED_EMPTY}
+					/>
+				)}
+				{tab === "shared" && (
+					<PostsTab
+						userId={profile.userId}
+						isSelf
+						url={endpoints.post.mySharedPosts}
+						empty={SHARED_EMPTY}
 					/>
 				)}
 				{tab === "about" && <AboutTab profile={profile} />}

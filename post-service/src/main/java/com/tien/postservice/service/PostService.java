@@ -315,7 +315,19 @@ public class PostService {
         }
 
         var postList = pageData.getContent().stream()
-                .map(sharedPost -> buildPostResponse(originalPost, sharedPost.getUserId()))
+                .map(sharedPost -> {
+                    // buildPostResponse lấy hồ sơ theo userId được truyền vào, nên hàng trả về
+                    // đã mang tên + avatar của NGƯỜI CHIA SẺ, nhưng userId/nội dung/ngày vẫn là
+                    // của bài gốc — client bấm vào một hàng sẽ mở nhầm trang cá nhân. Ghi đè lại
+                    // cho khớp ý nghĩa của endpoint: đây là danh sách "ai đã chia sẻ bài này",
+                    // không phải bài gốc lặp lại N lần.
+                    var response = buildPostResponse(originalPost, sharedPost.getUserId());
+                    response.setUserId(sharedPost.getUserId());
+                    response.setContent(sharedPost.getContent());
+                    response.setCreatedDate(sharedPost.getSharedDate());
+                    response.setCreated(dateTimeFormatter.format(sharedPost.getSharedDate()));
+                    return response;
+                })
                 .toList();
 
         return PageResponse.<PostResponse>builder()

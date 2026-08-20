@@ -11,8 +11,10 @@ import {
 	Lock,
 	PaperPlaneTilt,
 	PencilSimple,
+	Plus,
 	Smiley,
 	Trash,
+	X,
 } from "@phosphor-icons/react";
 import {
 	Avatar,
@@ -28,9 +30,12 @@ import endpoints from "../../../lib/endpoints";
 import { useAuth } from "../../../lib/auth";
 import { postDate, timeAgo } from "../../../lib/format";
 import { cn } from "../../../lib/cn";
+import { screenImageFiles, uploadPostImages } from "../../../lib/uploads";
 import { useComments } from "../hooks/useComments";
 import ReportModal from "../../moderation/ReportModal";
 import LikesModal from "./LikesModal";
+import SharePostModal from "./SharePostModal";
+import SharesModal from "./SharesModal";
 import PostImageGrid from "./PostImageGrid";
 import PostLink from "./PostLink";
 import ImageLightbox from "./ImageLightbox";
@@ -57,9 +62,12 @@ function usePostActions(post, onDeleted) {
 	// Nội dung giữ ở state để bản vừa sửa hiện ngay trên chính thẻ này.
 	const [content, setContent] = useState(post.content ?? "");
 	const [privacy, setPrivacy] = useState(post.privacy ?? "PUBLIC");
+	const [images, setImages] = useState(post.imageUrls ?? []);
 	const [editOpen, setEditOpen] = useState(false);
 	const [savingEdit, setSavingEdit] = useState(false);
 	const [likesOpen, setLikesOpen] = useState(false);
+	const [shareOpen, setShareOpen] = useState(false);
+	const [sharesOpen, setSharesOpen] = useState(false);
 
 	const isOwner = post.isOwnerPost ?? (post.userId != null && post.userId === userId);
 
@@ -103,15 +111,20 @@ function usePostActions(post, onDeleted) {
 		}
 	};
 
-	const doRepost = async () => {
+	// `content` phải đi bằng query param: backend khai báo @RequestParam chứ không
+	// phải @RequestBody, gửi trong body thì lời nhắn rơi mất và bài chia sẻ trống.
+	const doRepost = async (message) => {
 		if (reposting) return;
 		setReposting(true);
 		try {
-			await api.post(endpoints.post.share(post.id));
+			await api.post(endpoints.post.share(post.id), null, {
+				params: message ? { content: message } : undefined,
+			});
 			setShareCount((c) => c + 1);
-			toast.success("Đã đăng lại bài viết.");
+			setShareOpen(false);
+			toast.success("Đã chia sẻ bài viết.");
 		} catch (err) {
-			toast.error(err?.message || "Không đăng lại được, thử lại.");
+			toast.error(err?.message || "Không chia sẻ được, thử lại.");
 		} finally {
 			setReposting(false);
 		}
@@ -130,21 +143,42 @@ function usePostActions(post, onDeleted) {
 		}
 	};
 
-	// Sửa bằng endpoint JSON chứ không phải multipart: gửi mỗi `content` thì
-	// backend giữ nguyên imageUrls (updatePostInternal chỉ thay ảnh khi được
-	// truyền ảnh mới). Đây cũng là lý do màn sửa chỉ đổi chú thích, giống
-	// Instagram — thay ảnh sẽ phải upload lại toàn bộ.
-	const saveEdit = async (nextContent, nextPrivacy) => {
+	// Sửa luôn đi qua endpoint JSON, kể cả khi có ảnh mới.
+	//
+	// `PUT /post/{id}` (multipart) thay TOÀN BỘ imageUrls bằng đúng những file vừa
+	// gửi, nên thêm một ảnh sẽ xoá sạch ảnh cũ. Đường JSON nhận sẵn `imageUrls`,
+	// nên ta tự upload ảnh mới lên file-service rồi gửi danh sách đầy đủ
+	// (ảnh giữ lại + ảnh mới) — cách duy nhất vừa thêm vừa giữ được ảnh cũ.
+	//
+	// Một giới hạn không lách được: backend bỏ qua `imageUrls` rỗng, nên không có
+	// cách nào xoá hết ảnh của một bài đã có ảnh. EditPostModal chặn trước ở UI.
+	const saveEdit = async (nextContent, nextPrivacy, keptUrls, newFiles) => {
 		const text = (nextContent ?? "").trim();
-		if (!text || savingEdit) return;
+		const kept = keptUrls ?? images;
+		const files = newFiles ?? [];
+		if (savingEdit) return;
+		if (!text && kept.length === 0 && files.length === 0) return;
+
 		setSavingEdit(true);
 		try {
+			const imagesChanged = files.length > 0 || kept.length !== images.length;
+			let nextImages;
+			if (imagesChanged) {
+				const uploaded = await uploadPostImages(files, {
+					ownerId: userId,
+					postId: post.id,
+				});
+				nextImages = [...kept, ...uploaded];
+			}
+
 			const updated = await api.put(endpoints.post.updateJson(post.id), {
 				content: text,
 				privacy: nextPrivacy,
+				...(nextImages ? { imageUrls: nextImages } : {}),
 			});
 			setContent(updated?.content ?? text);
 			setPrivacy(updated?.privacy ?? nextPrivacy);
+			setImages(updated?.imageUrls ?? nextImages ?? images);
 			setEditOpen(false);
 			toast.success("Đã cập nhật bài viết.");
 		} catch (err) {
@@ -181,8 +215,13 @@ function usePostActions(post, onDeleted) {
 		bumpCommentCount,
 		content,
 		privacy,
+		images,
 		likesOpen,
 		setLikesOpen,
+		shareOpen,
+		setShareOpen,
+		sharesOpen,
+		setSharesOpen,
 		editOpen,
 		setEditOpen,
 		savingEdit,
@@ -255,22 +294,92 @@ function PostMenu({ menuOpen, setMenuOpen, isOwner, onEditClick, onDeleteClick, 
 	);
 }
 
-// Sửa bài viết = sửa chú thích. Ảnh không đổi được ở đây: endpoint multipart
-// thay TOÀN BỘ danh sách ảnh, nên "sửa ảnh" thực chất là đăng lại — để nguyên
-// còn hơn cho người dùng một nút xoá sạch ảnh mà họ không ngờ tới.
-function EditPostModal({ open, onClose, initialContent, initialPrivacy, onSave, loading }) {
+// Giữ bằng số ảnh tối đa của trình soạn bài để một bài đã sửa không thể vượt quá
+// giới hạn mà chính trình soạn bài áp lúc đăng.
+const MAX_IMAGES = 4;
+
+// Sửa bài viết: chú thích, quyền riêng tư và cả ảnh.
+//
+// Ảnh cũ được liệt kê để gỡ từng cái, ảnh mới chọn từ máy. Lúc lưu, PostCard
+// upload ảnh mới lên file-service rồi gửi danh sách URL đầy đủ qua endpoint JSON
+// (xem `saveEdit`). Ràng buộc duy nhất: bài đang có ảnh thì phải còn ít nhất một
+// ảnh — backend bỏ qua `imageUrls` rỗng nên "xoá hết ảnh" là việc không gửi được.
+function EditPostModal({
+	open,
+	onClose,
+	initialContent,
+	initialPrivacy,
+	initialImages,
+	onSave,
+	loading,
+}) {
+	const toast = useToast();
+	const fileRef = useRef(null);
+	const liveRef = useRef([]);
 	const [draft, setDraft] = useState(initialContent ?? "");
 	const [privacy, setPrivacy] = useState(initialPrivacy ?? "PUBLIC");
+	const [kept, setKept] = useState(initialImages ?? []);
+	const [added, setAdded] = useState([]); // { file, url }
+
+	const revokeAll = (list) => list.forEach((a) => URL.revokeObjectURL(a.url));
 
 	// Mở lại modal sau khi đã sửa thì phải bắt đầu từ nội dung mới nhất.
 	useEffect(() => {
 		if (!open) return;
 		setDraft(initialContent ?? "");
 		setPrivacy(initialPrivacy ?? "PUBLIC");
-	}, [open, initialContent, initialPrivacy]);
+		setKept(initialImages ?? []);
+		setAdded((prev) => {
+			revokeAll(prev);
+			return [];
+		});
+	}, [open, initialContent, initialPrivacy, initialImages]);
+
+	// Thu hồi object URL còn sót khi component biến mất.
+	useEffect(() => {
+		liveRef.current = added;
+	}, [added]);
+	useEffect(() => () => revokeAll(liveRef.current), []);
+
+	const total = kept.length + added.length;
+	const hadImages = (initialImages ?? []).length > 0;
+	const wouldEmptyImages = hadImages && total === 0;
+
+	const pickFiles = (e) => {
+		// Sao chép ra mảng TRƯỚC khi reset value — gán value = "" xoá luôn
+		// input.files, mà e.target.files chỉ là tham chiếu tới nó.
+		const list = Array.from(e.target.files || []);
+		e.target.value = "";
+
+		const { ok, rejected } = screenImageFiles(list);
+		if (rejected.length > 0) toast.error(rejected.join("; "));
+
+		const room = Math.max(0, MAX_IMAGES - total);
+		if (ok.length > room) toast(`Bài viết chỉ được tối đa ${MAX_IMAGES} ảnh.`);
+
+		const chosen = ok.slice(0, room);
+		if (chosen.length === 0) return;
+		setAdded((prev) => [
+			...prev,
+			...chosen.map((file) => ({ file, url: URL.createObjectURL(file) })),
+		]);
+	};
+
+	const removeAdded = (idx) => {
+		setAdded((prev) => {
+			URL.revokeObjectURL(prev[idx]?.url);
+			return prev.filter((_, i) => i !== idx);
+		});
+	};
+
+	const imagesChanged = added.length > 0 || kept.length !== (initialImages ?? []).length;
+	const unchanged =
+		draft === (initialContent ?? "") && privacy === initialPrivacy && !imagesChanged;
 
 	return (
 		<Modal open={open} onClose={() => !loading && onClose()} title="Chỉnh sửa bài viết" size="md">
+			<input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={pickFiles} />
+
 			<Textarea
 				rows={6}
 				maxLength={5000}
@@ -279,9 +388,63 @@ function EditPostModal({ open, onClose, initialContent, initialPrivacy, onSave, 
 				placeholder="Bạn đang nghĩ gì?"
 				aria-label="Nội dung bài viết"
 			/>
-			<p className="mt-2 text-xs text-muted">
-				Ảnh của bài viết được giữ nguyên. Để đổi ảnh, hãy đăng một bài mới.
-			</p>
+
+			<div className="mt-3 flex flex-wrap items-center gap-2">
+				{kept.map((url, i) => (
+					<div key={url} className="relative">
+						<img
+							src={url}
+							alt={`Ảnh ${i + 1}`}
+							className="h-16 w-16 rounded border border-line object-cover"
+						/>
+						<button
+							type="button"
+							onClick={() => setKept((prev) => prev.filter((u) => u !== url))}
+							disabled={loading}
+							aria-label={`Gỡ ảnh ${i + 1}`}
+							className="absolute -right-1 -top-1 rounded-full bg-black/70 p-0.5 text-white transition-opacity hover:opacity-70 disabled:opacity-40"
+						>
+							<X size={10} />
+						</button>
+					</div>
+				))}
+				{added.map((a, i) => (
+					<div key={a.url} className="relative">
+						<img
+							src={a.url}
+							alt={`Ảnh mới ${i + 1}`}
+							className="h-16 w-16 rounded border border-accent object-cover"
+						/>
+						<button
+							type="button"
+							onClick={() => removeAdded(i)}
+							disabled={loading}
+							aria-label={`Gỡ ảnh mới ${i + 1}`}
+							className="absolute -right-1 -top-1 rounded-full bg-black/70 p-0.5 text-white transition-opacity hover:opacity-70 disabled:opacity-40"
+						>
+							<X size={10} />
+						</button>
+					</div>
+				))}
+				{total < MAX_IMAGES && (
+					<button
+						type="button"
+						onClick={() => fileRef.current?.click()}
+						disabled={loading}
+						aria-label="Thêm ảnh"
+						className="flex h-16 w-16 items-center justify-center rounded border border-dashed border-line text-faint transition-colors hover:text-muted disabled:opacity-40"
+					>
+						<Plus size={18} />
+					</button>
+				)}
+			</div>
+
+			{wouldEmptyImages && (
+				<p className="mt-2 text-xs text-like">
+					Bài viết phải còn ít nhất một ảnh. Muốn bỏ hết ảnh thì phải xoá bài rồi đăng lại.
+				</p>
+			)}
+
 			<label className="mt-4 flex items-center gap-2 text-sm text-muted">
 				Quyền riêng tư
 				<select
@@ -298,10 +461,10 @@ function EditPostModal({ open, onClose, initialContent, initialPrivacy, onSave, 
 					Huỷ
 				</Button>
 				<Button
-					onClick={() => onSave(draft, privacy)}
+					onClick={() => onSave(draft, privacy, kept, added.map((a) => a.file))}
 					loading={loading}
 					disabled={
-						!draft.trim() || (draft === initialContent && privacy === initialPrivacy)
+						unchanged || wouldEmptyImages || (!draft.trim() && total === 0)
 					}
 				>
 					Lưu thay đổi
@@ -425,6 +588,7 @@ function ActionBar({
 	onShare,
 	onRepost,
 	onShowLikes,
+	onShowShares,
 	reposting,
 	commentSlot,
 }) {
@@ -457,12 +621,22 @@ function ActionBar({
 				type="button"
 				onClick={onRepost}
 				disabled={reposting}
-				aria-label="Đăng lại"
+				aria-label="Chia sẻ bài viết"
 				className="flex items-center gap-1.5 text-ink transition-opacity hover:opacity-60 disabled:opacity-40"
 			>
 				<ArrowsClockwise size={24} />
-				<ActionCount value={shareCount} />
 			</button>
+			{/* Cùng cách chia như lượt thích: icon để chia sẻ, con số để xem ai đã
+			    chia sẻ (GET /post/shared-posts/{id}). */}
+			{shareCount > 0 && (
+				<button
+					type="button"
+					onClick={onShowShares}
+					className="-ml-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-60"
+				>
+					{shareCount}
+				</button>
+			)}
 			<button
 				type="button"
 				onClick={onShare}
@@ -563,7 +737,9 @@ function CommentComposer({ inputRef, value, onChange, onSubmit, sending, autoFoc
 function FeedPostCard({ post, onDeleted }) {
 	const a = usePostActions(post, onDeleted);
 	const toast = useToast();
-	const images = post.imageUrls ?? [];
+	// Lấy từ state của usePostActions, không phải từ prop: sửa bài xong danh sách
+	// ảnh phải đổi ngay trên chính thẻ này mà không cần tải lại feed.
+	const images = a.images;
 	const hasImages = images.length > 0;
 	// Bám tỉ lệ ảnh thật (đã kẹp 4:5..1.91:1) thay vì ép vuông — ảnh ngang hiện
 	// trọn vẹn, không còn bị cắt hai bên như trước.
@@ -655,10 +831,11 @@ function FeedPostCard({ post, onDeleted }) {
 				onToggleLike={a.toggleLike}
 				onToggleSave={a.toggleSave}
 				onShare={a.share}
-				onRepost={a.doRepost}
+				onRepost={() => a.setShareOpen(true)}
 				reposting={a.reposting}
 				likeCount={a.likeCount}
 				onShowLikes={() => a.setLikesOpen(true)}
+				onShowShares={() => a.setSharesOpen(true)}
 				shareCount={a.shareCount}
 				commentSlot={
 					<PostLink
@@ -713,6 +890,7 @@ function FeedPostCard({ post, onDeleted }) {
 				onClose={() => a.setEditOpen(false)}
 				initialContent={a.content}
 				initialPrivacy={a.privacy}
+				initialImages={a.images}
 				onSave={a.saveEdit}
 				loading={a.savingEdit}
 			/>
@@ -736,6 +914,20 @@ function FeedPostCard({ post, onDeleted }) {
 				onClose={() => a.setLikesOpen(false)}
 				postId={post.id}
 			/>
+
+			<SharePostModal
+				open={a.shareOpen}
+				onClose={() => a.setShareOpen(false)}
+				post={post}
+				onSubmit={a.doRepost}
+				loading={a.reposting}
+			/>
+
+			<SharesModal
+				open={a.sharesOpen}
+				onClose={() => a.setSharesOpen(false)}
+				postId={post.id}
+			/>
 		</Card>
 	);
 }
@@ -745,7 +937,9 @@ function FeedPostCard({ post, onDeleted }) {
 function PostDetailCard({ post, onDeleted }) {
 	const a = usePostActions(post, onDeleted);
 	const toast = useToast();
-	const images = post.imageUrls ?? [];
+	// Lấy từ state của usePostActions, không phải từ prop: sửa bài xong danh sách
+	// ảnh phải đổi ngay trên chính thẻ này mà không cần tải lại feed.
+	const images = a.images;
 	const hasImages = images.length > 0;
 	const ratio = useImageRatio(images[0]);
 	const composerRef = useRef(null);
@@ -817,6 +1011,7 @@ function PostDetailCard({ post, onDeleted }) {
 						menuOpen={a.menuOpen}
 						setMenuOpen={a.setMenuOpen}
 						isOwner={a.isOwner}
+						onEditClick={() => a.setEditOpen(true)}
 						onDeleteClick={() => a.setConfirmOpen(true)}
 						onReportClick={() => a.setReportOpen(true)}
 					/>
@@ -853,10 +1048,11 @@ function PostDetailCard({ post, onDeleted }) {
 						onToggleLike={a.toggleLike}
 						onToggleSave={a.toggleSave}
 						onShare={a.share}
-						onRepost={a.doRepost}
+						onRepost={() => a.setShareOpen(true)}
 						reposting={a.reposting}
 						likeCount={a.likeCount}
 						onShowLikes={() => a.setLikesOpen(true)}
+						onShowShares={() => a.setSharesOpen(true)}
 						shareCount={a.shareCount}
 						commentSlot={
 							<button
@@ -894,6 +1090,7 @@ function PostDetailCard({ post, onDeleted }) {
 				onClose={() => a.setEditOpen(false)}
 				initialContent={a.content}
 				initialPrivacy={a.privacy}
+				initialImages={a.images}
 				onSave={a.saveEdit}
 				loading={a.savingEdit}
 			/>
@@ -915,6 +1112,20 @@ function PostDetailCard({ post, onDeleted }) {
 			<LikesModal
 				open={a.likesOpen}
 				onClose={() => a.setLikesOpen(false)}
+				postId={post.id}
+			/>
+
+			<SharePostModal
+				open={a.shareOpen}
+				onClose={() => a.setShareOpen(false)}
+				post={post}
+				onSubmit={a.doRepost}
+				loading={a.reposting}
+			/>
+
+			<SharesModal
+				open={a.sharesOpen}
+				onClose={() => a.setSharesOpen(false)}
 				postId={post.id}
 			/>
 		</Card>
