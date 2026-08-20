@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
 	ArrowLeft,
+	Flag,
 	Gear,
 	Plus,
 	ImageSquare,
@@ -25,11 +26,22 @@ import {
 import api, { http, toFormData } from "../../lib/api";
 import endpoints from "../../lib/endpoints";
 import { useAuth } from "../../lib/auth";
-import { pageItems, pageTotalPages, isMemberOf, canManage, privacyMeta } from "./groupUtils";
+import {
+	pageItems,
+	pageTotalPages,
+	isMemberOf,
+	isOwner,
+	isGroupAdmin,
+	canManage,
+	privacyMeta,
+} from "./groupUtils";
 import MemberRow from "./components/MemberRow";
+import EditGroupModal from "./components/EditGroupModal";
+import AddMemberModal from "./components/AddMemberModal";
 import JoinRequestRow from "./components/JoinRequestRow";
 import GroupPostCard from "./components/GroupPostCard";
 import { RowsSkeleton, PostGridSkeleton } from "./components/GroupSkeletons";
+import ReportModal from "../moderation/ReportModal";
 
 // Trang chi tiết nhóm ánh xạ theo trang hồ sơ Instagram: avatar + tên + nút
 // hành động, hàng chỉ số (bài viết / thành viên), mô tả, rồi dải tab.
@@ -47,6 +59,11 @@ export default function GroupDetailPage() {
 	const [pending, setPending] = useState(false);
 	const [postCount, setPostCount] = useState(null);
 	const [composeOpen, setComposeOpen] = useState(false);
+	const [reportOpen, setReportOpen] = useState(false);
+	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [savingGroup, setSavingGroup] = useState(false);
+	const [deletingGroup, setDeletingGroup] = useState(false);
+	const [addMemberOpen, setAddMemberOpen] = useState(false);
 
 	// Thành viên
 	const [members, setMembers] = useState([]);
@@ -111,6 +128,8 @@ export default function GroupDetailPage() {
 	}, [groupId]);
 
 	const canMng = canManage(group, userId);
+	const isGroupOwner = isOwner(group, userId);
+	const isAdmin = isGroupAdmin(group, userId);
 
 	async function loadMembers(page) {
 		if (page === 1) setMembersLoading(true);
@@ -217,10 +236,8 @@ export default function GroupDetailPage() {
 
 	async function handleProcess(request, approve) {
 		setRequestBusyId(request.id);
-		// endpoints.js chưa có route "process"; ghép từ base group (đúng route backend).
-		const url = `${endpoints.group.byId(groupId)}/join-requests/${request.id}/process`;
 		try {
-			await api.post(url, { approve });
+			await api.post(endpoints.group.processJoinRequest(groupId, request.id), { approve });
 			setRequests((list) => list.filter((r) => r.id !== request.id));
 			setGroup((g) =>
 				g
@@ -243,10 +260,8 @@ export default function GroupDetailPage() {
 	async function handleRemoveMember(member) {
 		const mid = member.userId ?? member.id;
 		setMemberBusyId(mid);
-		// endpoints.js chưa có route xoá thành viên; ghép từ base group (đúng route backend).
-		const url = `${endpoints.group.byId(groupId)}/members/${member.userId}`;
 		try {
-			await api.delete(url);
+			await api.delete(endpoints.group.member(groupId, member.userId));
 			setMembers((list) => list.filter((m) => (m.userId ?? m.id) !== mid));
 			setGroup((g) => (g ? { ...g, memberCount: Math.max(0, (g.memberCount ?? 1) - 1) } : g));
 			toast.success("Đã xoá thành viên khỏi nhóm.");
@@ -255,6 +270,73 @@ export default function GroupDetailPage() {
 		} finally {
 			setMemberBusyId(null);
 		}
+	}
+
+	// UpdateGroupRequest không mang ảnh; hai ảnh có endpoint multipart riêng nên
+	// phải gọi tuần tự sau khi lưu phần JSON, giống hệt luồng tạo nhóm.
+	async function handleSaveGroup({ payload, coverFile, avatarFile }) {
+		setSavingGroup(true);
+		try {
+			let updated = await api.put(endpoints.group.update(groupId), payload);
+			const mp = { headers: { "Content-Type": "multipart/form-data" } };
+			if (coverFile) {
+				try {
+					updated = await api.put(endpoints.group.cover(groupId), toFormData({ file: coverFile }), mp);
+				} catch {
+					toast.error("Đã lưu nhóm nhưng tải ảnh bìa thất bại.");
+				}
+			}
+			if (avatarFile) {
+				try {
+					updated = await api.put(endpoints.group.avatar(groupId), toFormData({ file: avatarFile }), mp);
+				} catch {
+					toast.error("Đã lưu nhóm nhưng tải ảnh đại diện thất bại.");
+				}
+			}
+			// Response của endpoint ảnh không kèm cờ isMember/memberRole, nên trộn
+			// vào nhóm đang có thay vì thay thế — nếu không nút "Đã tham gia" sẽ
+			// nhảy về "Tham gia" ngay sau khi lưu.
+			setGroup((g) => ({ ...g, ...updated }));
+			setSettingsOpen(false);
+			toast.success("Đã cập nhật nhóm.");
+		} catch (e) {
+			toast.error(e.message || "Không cập nhật được nhóm.");
+			throw e;
+		} finally {
+			setSavingGroup(false);
+		}
+	}
+
+	async function handleDeleteGroup() {
+		setDeletingGroup(true);
+		try {
+			await api.delete(endpoints.group.remove(groupId));
+			toast.success("Đã xoá nhóm.");
+			navigate("/groups", { replace: true });
+		} catch (e) {
+			toast.error(e.message || "Không xoá được nhóm.");
+			setDeletingGroup(false);
+		}
+	}
+
+	async function handleChangeRole(member, role) {
+		const mid = member.userId ?? member.id;
+		setMemberBusyId(mid);
+		try {
+			await api.put(endpoints.group.memberRole(groupId, member.userId), { role });
+			setMembers((list) => list.map((m) => ((m.userId ?? m.id) === mid ? { ...m, role } : m)));
+			toast.success("Đã đổi vai trò thành viên.");
+		} catch (e) {
+			toast.error(e.message || "Không đổi được vai trò.");
+		} finally {
+			setMemberBusyId(null);
+		}
+	}
+
+	async function handleAddMember(profile) {
+		await api.post(endpoints.group.member(groupId, profile.userId));
+		setGroup((g) => (g ? { ...g, memberCount: (g.memberCount ?? 0) + 1 } : g));
+		if (membersLoaded) loadMembers(1);
 	}
 
 	function handlePostCreated(created) {
@@ -323,7 +405,12 @@ export default function GroupDetailPage() {
 						</h1>
 
 						{canMng ? (
-							<IconButton label="Quản lý nhóm" onClick={() => setActiveTab("requests")}>
+							<IconButton
+								label={isGroupOwner ? "Cài đặt nhóm" : "Quản lý nhóm"}
+								onClick={() =>
+									isGroupOwner ? setSettingsOpen(true) : setActiveTab("requests")
+								}
+							>
 								<Gear size={22} />
 							</IconButton>
 						) : member ? (
@@ -338,6 +425,15 @@ export default function GroupDetailPage() {
 							<Button variant="primary" size="md" loading={busy} onClick={handleJoin}>
 								Tham gia
 							</Button>
+						)}
+
+						{/* moderation-service nhận TargetType.GROUP và tra chủ nhóm qua
+						    /internal/groups/{id}, nhưng trước đây không có lối vào nào
+						    trên giao diện — chỉ bài viết và bình luận báo cáo được. */}
+						{group.ownerId !== userId && (
+							<IconButton label="Báo cáo nhóm" onClick={() => setReportOpen(true)}>
+								<Flag size={20} />
+							</IconButton>
 						)}
 					</div>
 
@@ -394,9 +490,12 @@ export default function GroupDetailPage() {
 						members={members}
 						ownerId={group.ownerId}
 						canManage={canMng}
+						canChangeRole={isAdmin}
 						currentUserId={userId}
 						busyId={memberBusyId}
 						onRemove={handleRemoveMember}
+						onChangeRole={handleChangeRole}
+						onAddMember={() => setAddMemberOpen(true)}
 						hasMore={membersPage < membersTotalPages}
 						loadingMore={membersMore}
 						onMore={() => loadMembers(membersPage + 1)}
@@ -419,6 +518,33 @@ export default function GroupDetailPage() {
 				onClose={() => setComposeOpen(false)}
 				groupId={groupId}
 				onCreated={handlePostCreated}
+			/>
+
+			<ReportModal
+				open={reportOpen}
+				onClose={() => setReportOpen(false)}
+				targetType="GROUP"
+				targetId={groupId}
+				targetLabel="nhóm này"
+			/>
+
+			{isGroupOwner && (
+				<EditGroupModal
+					open={settingsOpen}
+					group={group}
+					onClose={() => setSettingsOpen(false)}
+					onSave={handleSaveGroup}
+					onDelete={handleDeleteGroup}
+					submitting={savingGroup}
+					deleting={deletingGroup}
+				/>
+			)}
+
+			<AddMemberModal
+				open={addMemberOpen}
+				onClose={() => setAddMemberOpen(false)}
+				onAdd={handleAddMember}
+				existingIds={members.map((m) => m.userId).filter(Boolean)}
 			/>
 		</div>
 	);
@@ -464,18 +590,30 @@ function TabMembers({
 	members,
 	ownerId,
 	canManage,
+	canChangeRole,
 	currentUserId,
 	busyId,
 	onRemove,
+	onChangeRole,
+	onAddMember,
 	hasMore,
 	loadingMore,
 	onMore,
 }) {
 	if (loading) return <RowsSkeleton count={6} />;
-	if (members.length === 0)
-		return <EmptyState icon={Users} title="Chưa có thành viên" description="Nhóm này chưa có ai." />;
 	return (
 		<div>
+			{canManage && (
+				<div className="mb-4 flex justify-end">
+					<Button variant="secondary" size="md" onClick={onAddMember}>
+						<UserPlus size={16} weight="bold" /> Thêm thành viên
+					</Button>
+				</div>
+			)}
+
+			{members.length === 0 ? (
+				<EmptyState icon={Users} title="Chưa có thành viên" description="Nhóm này chưa có ai." />
+			) : (
 			<div className="divide-y divide-line-soft">
 				{members.map((m) => (
 					<MemberRow
@@ -483,12 +621,15 @@ function TabMembers({
 						member={m}
 						ownerId={ownerId}
 						canManage={canManage}
+						canChangeRole={canChangeRole}
 						currentUserId={currentUserId}
 						busy={busyId === (m.userId ?? m.id)}
 						onRemove={() => onRemove(m)}
+						onChangeRole={onChangeRole}
 					/>
 				))}
 			</div>
+			)}
 			{hasMore && (
 				<div className="flex justify-center pt-4">
 					<Button variant="secondary" size="sm" loading={loadingMore} onClick={onMore}>

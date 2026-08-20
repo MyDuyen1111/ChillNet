@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MagnifyingGlass, Plus, Crown, UsersThree, Compass } from "@phosphor-icons/react";
+import { Link } from "react-router-dom";
+import { MagnifyingGlass, Plus, Crown, UsersThree, Compass, PaperPlaneTilt } from "@phosphor-icons/react";
 import { Button, Tabs, EmptyState, useToast } from "../../components/ui";
 import api, { toFormData } from "../../lib/api";
 import endpoints from "../../lib/endpoints";
 import { useAuth } from "../../lib/auth";
-import { pageItems } from "./groupUtils";
+import { pageItems, relTime } from "./groupUtils";
 import GroupCard from "./components/GroupCard";
 import CreateGroupModal from "./components/CreateGroupModal";
 import { GroupGridSkeleton } from "./components/GroupSkeletons";
@@ -16,6 +17,9 @@ import { GroupGridSkeleton } from "./components/GroupSkeletons";
 const TABS = [
 	{ key: "mine", label: "Nhóm của tôi", icon: Crown },
 	{ key: "joined", label: "Đã tham gia", icon: UsersThree },
+	// Nhóm cần phê duyệt để lại một yêu cầu PENDING mà trước đây không có màn nào
+	// hiển thị: người dùng gửi xong là mất dấu, và cũng không huỷ lại được.
+	{ key: "requests", label: "Chờ duyệt", icon: PaperPlaneTilt },
 	{ key: "discover", label: "Khám phá", icon: Compass },
 ];
 
@@ -34,6 +38,9 @@ export default function GroupsPage() {
 	const [loadingDiscover, setLoadingDiscover] = useState(true);
 	const [createOpen, setCreateOpen] = useState(false);
 	const [creating, setCreating] = useState(false);
+	const [myRequests, setMyRequests] = useState([]);
+	const [loadingRequests, setLoadingRequests] = useState(true);
+	const [cancellingId, setCancellingId] = useState(null);
 
 	const loadMine = useCallback(() => {
 		setLoadingMine(true);
@@ -54,6 +61,16 @@ export default function GroupsPage() {
 			.finally(() => setLoadingJoined(false));
 	}, [toast, userId]);
 
+	const loadMyRequests = useCallback(() => {
+		setLoadingRequests(true);
+		return api
+			.get(endpoints.group.myJoinRequests, { params: { page: 1, size: 20 } })
+			// Yêu cầu đã duyệt / bị từ chối không còn huỷ được nữa, chỉ giữ PENDING.
+			.then((r) => setMyRequests(pageItems(r).filter((x) => x.status === "PENDING")))
+			.catch((e) => toast.error(e.message || "Không tải được yêu cầu đã gửi."))
+			.finally(() => setLoadingRequests(false));
+	}, [toast]);
+
 	const loadDiscover = useCallback(
 		(keyword) => {
 			setLoadingDiscover(true);
@@ -72,7 +89,8 @@ export default function GroupsPage() {
 	useEffect(() => {
 		loadMine();
 		loadJoined();
-	}, [loadMine, loadJoined]);
+		loadMyRequests();
+	}, [loadMine, loadJoined, loadMyRequests]);
 
 	useEffect(() => {
 		const id = setTimeout(() => loadDiscover(query), query ? 350 : 0);
@@ -108,6 +126,19 @@ export default function GroupsPage() {
 			throw e;
 		} finally {
 			setCreating(false);
+		}
+	}
+
+	async function handleCancelRequest(request) {
+		setCancellingId(request.id);
+		try {
+			await api.delete(endpoints.group.cancelJoinRequest(request.groupId, request.id));
+			setMyRequests((list) => list.filter((r) => r.id !== request.id));
+			toast.success("Đã huỷ yêu cầu tham gia.");
+		} catch (e) {
+			toast.error(e.message || "Không huỷ được yêu cầu.");
+		} finally {
+			setCancellingId(null);
 		}
 	}
 
@@ -159,7 +190,14 @@ export default function GroupsPage() {
 			</div>
 
 			<div className="py-6">
-				{loading ? (
+				{tab === "requests" ? (
+					<JoinRequestsTab
+						loading={loadingRequests}
+						requests={myRequests}
+						cancellingId={cancellingId}
+						onCancel={handleCancelRequest}
+					/>
+				) : loading ? (
 					<GroupGridSkeleton count={6} />
 				) : items.length === 0 ? (
 					<EmptyState icon={UsersThree} title={emptyTitle} description={emptyDescription} />
@@ -178,6 +216,51 @@ export default function GroupsPage() {
 				onCreate={handleCreate}
 				submitting={creating}
 			/>
+		</div>
+	);
+}
+
+// Danh sách yêu cầu tham gia đang chờ duyệt của chính mình.
+function JoinRequestsTab({ loading, requests, cancellingId, onCancel }) {
+	if (loading) return <GroupGridSkeleton count={3} />;
+	if (requests.length === 0) {
+		return (
+			<EmptyState
+				icon={PaperPlaneTilt}
+				title="Không có yêu cầu nào đang chờ"
+				description="Khi bạn xin vào một nhóm cần phê duyệt, yêu cầu sẽ hiện ở đây cho tới khi được xử lý."
+			/>
+		);
+	}
+	return (
+		<div className="divide-y divide-line-soft">
+			{requests.map((r) => (
+				<div key={r.id} className="flex items-center gap-3 py-3">
+					{/* JoinRequestResponse.avatar là ảnh của NGƯỜI gửi yêu cầu, không
+					    phải ảnh nhóm — ở danh sách "yêu cầu của tôi" thì người gửi
+					    luôn là chính mình, nên dùng glyph nhóm cho đúng nghĩa. */}
+					<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-fill text-muted">
+						<UsersThree size={22} />
+					</span>
+					<Link to={`/groups/${r.groupId}`} className="min-w-0 flex-1">
+						<span className="block truncate text-sm font-semibold text-ink">
+							{r.groupName || "Nhóm"}
+						</span>
+						<span className="block truncate text-xs text-muted">
+							{r.requestedDate ? `Đã gửi ${relTime(r.requestedDate)}` : "Đang chờ duyệt"}
+						</span>
+					</Link>
+					<Button
+						variant="secondary"
+						size="sm"
+						loading={cancellingId === r.id}
+						onClick={() => onCancel(r)}
+						className="shrink-0"
+					>
+						Huỷ
+					</Button>
+				</div>
+			))}
 		</div>
 	);
 }

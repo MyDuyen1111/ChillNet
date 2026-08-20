@@ -32,6 +32,12 @@ export function canManage(group, userId) {
 	return role === "ADMIN" || role === "MODERATOR";
 }
 
+// Đổi vai trò thành viên đòi hỏi ADMIN, không phải MODERATOR
+// (GroupService.updateMemberRole -> checkAdminPermission).
+export function isGroupAdmin(group, userId) {
+	return isOwner(group, userId) || currentRole(group) === "ADMIN";
+}
+
 const PRIVACY = {
 	PUBLIC: { label: "Công khai", Icon: Globe, hint: "Ai cũng có thể tìm và xem nội dung." },
 	CLOSED: { label: "Kín", Icon: LockKey, hint: "Tìm thấy được, nhưng cần tham gia mới xem." },
