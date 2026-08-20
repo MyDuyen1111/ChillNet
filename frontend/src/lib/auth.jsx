@@ -6,7 +6,7 @@ import {
 	useMemo,
 	useState,
 } from "react";
-import api, { tokenStore } from "./api";
+import api, { refreshSession, tokenStore } from "./api";
 import endpoints from "./endpoints";
 
 // Decode a JWT payload without verifying it (verification is the gateway's job).
@@ -45,7 +45,19 @@ export function AuthProvider({ children }) {
 
 	const hydrate = useCallback(async () => {
 		const token = tokenStore.get();
-		const claims = token && decodeToken(token);
+		let claims = token && decodeToken(token);
+
+		// Token còn đó nhưng đã quá hạn 1 giờ: identity-service vẫn đổi được nó
+		// trong 10 giờ kể từ lúc phát, nên thử đổi trước khi coi như mất phiên.
+		// Đây là lý do đóng tab qua đêm rồi mở lại không bị đá ra màn đăng nhập.
+		if (token && !claims) {
+			try {
+				claims = decodeToken(await refreshSession());
+			} catch {
+				claims = null;
+			}
+		}
+
 		if (!claims) {
 			tokenStore.clear();
 			setUser(null);
@@ -84,9 +96,21 @@ export function AuthProvider({ children }) {
 		return api.post(endpoints.auth.register, payload);
 	}, []);
 
-	const logout = useCallback(() => {
+	const logout = useCallback(async () => {
+		// Ghi token vào bảng invalidated_token của identity-service. Không có
+		// bước này thì JWT vẫn hợp lệ đến khi hết hạn: ai copy được token trước
+		// lúc đăng xuất vẫn dùng tiếp được cả tiếng.
+		const token = tokenStore.get();
+		// Xoá phiên trước rồi mới gọi API: nếu mạng hỏng, người dùng vẫn phải
+		// được đăng xuất khỏi máy này.
 		tokenStore.clear();
 		setUser(null);
+		if (!token) return;
+		try {
+			await api.post(endpoints.auth.logout, { token });
+		} catch {
+			// Token có thể đã hết hạn / bị revoke sẵn — không có gì để báo.
+		}
 	}, []);
 
 	const refreshProfile = useCallback(async () => {

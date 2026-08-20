@@ -84,6 +84,16 @@ export default function LoginPage() {
 				</AuthButton>
 			</form>
 
+			<p className="mt-4 text-center text-sm">
+				<Link
+					to="/forgot-password"
+					state={{ email: form.username.includes("@") ? form.username.trim() : "" }}
+					className="text-accent hover:underline"
+				>
+					Quên mật khẩu?
+				</Link>
+			</p>
+
 			<div aria-hidden className="my-7 h-px bg-line" />
 
 			<AuthButton as={Link} to="/register" variant="accent">

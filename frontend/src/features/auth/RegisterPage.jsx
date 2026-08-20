@@ -5,6 +5,7 @@ import { useToast } from "../../components/ui";
 import AuthButton from "./AuthButton";
 import AuthField from "./AuthField";
 import AuthLayout from "./AuthLayout";
+import { EMAIL_PATTERN, PASSWORD_ERROR, PASSWORD_PATTERN } from "./passwordRules";
 
 const EMPTY = {
 	firstName: "",
@@ -15,11 +16,6 @@ const EMPTY = {
 	confirmPassword: "",
 };
 
-const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const PASSWORD_PATTERN =
-	/^(?=.*\p{Ll})(?=.*\p{Lu})(?=.*\d)(?=.*[^\p{L}\p{N}\s])\S{8,}$/u;
-const PASSWORD_ERROR =
-	"Mật khẩu phải có ít nhất 8 ký tự, gồm chữ thường, chữ in hoa, chữ số và ký tự đặc biệt.";
 const USER_EXISTED_CODE = 1101;
 const EMAIL_EXISTED_CODE = 1304;
 

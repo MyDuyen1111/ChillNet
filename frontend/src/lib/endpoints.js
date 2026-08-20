@@ -40,7 +40,6 @@ export const endpoints = {
 		public: svc("post", "/public"),
 		myPosts: svc("post", "/my-posts"),
 		byId: (id) => svc("post", `/${id}`),
-		update: (id) => svc("post", `/${id}`), // multipart
 		updateJson: (id) => svc("post", `/${id}/json`),
 		remove: (id) => svc("post", `/${id}`),
 		byUser: (userId) => svc("post", `/user/${userId}`),
@@ -78,7 +77,10 @@ export const endpoints = {
 		receivedRequests: svc("social", "/friendships/received-requests"),
 		suggested: svc("social", "/friendships/suggested"),
 		friendStatus: (friendId) => svc("social", `/friendships/status/${friendId}`),
-		mutual: (friendId) => svc("social", `/friendships/mutual/${friendId}`),
+		// POST, body là mảng userId trần; trả { statuses: { userId: "ACCEPTED" | ... } }.
+		// Dùng cho mọi danh sách người dùng để tránh một lượt gọi mỗi dòng.
+		batchFriendStatus: svc("social", "/friendships/batch-status"),
+		searchFriends: svc("social", "/friendships/search"),
 		counts: svc("social", "/friendships/counts"),
 		follow: (userId) => svc("social", `/follows/${userId}`),
 		unfollow: (userId) => svc("social", `/follows/${userId}`),
@@ -88,6 +90,8 @@ export const endpoints = {
 		block: (userId) => svc("social", `/blocks/${userId}`),
 		unblock: (userId) => svc("social", `/blocks/${userId}`),
 		blocks: svc("social", "/blocks"),
+		isBlocked: (userId) => svc("social", `/blocks/check/${userId}`),
+		mutualFriends: (userId) => svc("social", `/friendships/mutual/${userId}`),
 	},
 
 	// ---- chat-service ----
@@ -96,6 +100,11 @@ export const endpoints = {
 		myConversations: svc("chat", "/conversations/my-conversations"),
 		conversationById: (id) => svc("chat", `/conversations/${id}`),
 		leaveConversation: (id) => svc("chat", `/conversations/${id}/leave`),
+		participants: (id) => svc("chat", `/conversations/${id}/participants`),
+		participant: (id, participantId) =>
+			svc("chat", `/conversations/${id}/participants/${participantId}`),
+		admins: (id) => svc("chat", `/conversations/${id}/admins`),
+		admin: (id, participantId) => svc("chat", `/conversations/${id}/admins/${participantId}`),
 		messages: svc("chat", "/messages"),
 		messagesPaginated: svc("chat", "/messages/paginated"),
 		messageById: (id) => svc("chat", `/messages/${id}`),
@@ -112,9 +121,16 @@ export const endpoints = {
 		avatar: (id) => svc("group", `/groups/${id}/avatar`),
 		cover: (id) => svc("group", `/groups/${id}/cover`),
 		members: (id) => svc("group", `/groups/${id}/members`),
+		member: (id, userId) => svc("group", `/groups/${id}/members/${userId}`),
+		memberRole: (id, userId) => svc("group", `/groups/${id}/members/${userId}/role`),
 		join: (id) => svc("group", `/groups/${id}/join`),
 		leave: (id) => svc("group", `/groups/${id}/leave`),
 		joinRequests: (id) => svc("group", `/groups/${id}/join-requests`),
+		processJoinRequest: (id, requestId) =>
+			svc("group", `/groups/${id}/join-requests/${requestId}/process`),
+		cancelJoinRequest: (id, requestId) =>
+			svc("group", `/groups/${id}/join-requests/${requestId}`),
+		myJoinRequests: svc("group", "/groups/my-join-requests"),
 		myGroups: svc("group", "/groups/my-groups"),
 		joinedGroups: svc("group", "/groups/joined-groups"),
 		search: svc("group", "/groups/search"),
