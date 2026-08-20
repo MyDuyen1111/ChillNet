@@ -2,6 +2,7 @@ package com.tien.profileservice.service;
 
 import java.util.List;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -53,6 +54,11 @@ public class ProfileService {
         return profileMapper.toProfileResponse(userProfile);
     }
 
+    // Đổ nguyên bảng hồ sơ ra ngoài — trước đây bất kỳ tài khoản nào đăng nhập cũng gọi được,
+    // tức là một lượt GET là có sạch họ tên, ngày sinh, thành phố của toàn bộ người dùng. Việc
+    // duyệt người dùng là việc của quản trị viên, nên gác đúng bằng ROLE_ADMIN như các endpoint
+    // quản trị bên identity-service. Tìm người dùng thường vẫn đi qua POST /users/search.
+    @PreAuthorize("hasRole('ADMIN')")
     public List<ProfileResponse> getAllProfiles() {
         var profiles = profileRepository.findAll();
 

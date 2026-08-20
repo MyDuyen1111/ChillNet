@@ -10,10 +10,11 @@ import {
 	UsersThree,
 	WarningCircle,
 } from "@phosphor-icons/react";
-import { Button, Card, EmptyState, Input, Modal, Spinner, useToast } from "../../components/ui";
+import { Avatar, Button, Card, EmptyState, Input, Modal, Spinner, useToast } from "../../components/ui";
 import api from "../../lib/api";
 import endpoints from "../../lib/endpoints";
 import { cn } from "../../lib/cn";
+import { displayName } from "../../lib/format";
 import { useAuth } from "../../lib/auth";
 import Badge from "../moderation/components/Badge";
 
@@ -191,14 +192,25 @@ function DeactivateModal({ user, onClose, onDone }) {
 	);
 }
 
-function UserRow({ user, isSelf, deactivated, onEditRoles, onDeactivate }) {
+function UserRow({ user, profile, isSelf, deactivated, onEditRoles, onDeactivate }) {
 	const names = roleNames(user);
+	// Họ tên nằm ở profile-service; thiếu hồ sơ thì lùi về username của tài khoản.
+	// Phải kiểm tra `profile` trước chứ không dùng `|| user.username`: displayName
+	// trả về chuỗi "Người dùng" khi không có hồ sơ, tức là luôn truthy, nên nhánh
+	// dự phòng sẽ không bao giờ chạy và mọi hàng thiếu hồ sơ đều mang cùng một tên.
+	const shownName = profile ? displayName(profile) : user.username;
 
 	return (
 		<div className="flex flex-wrap items-start gap-3 border-b border-line px-4 py-3 last:border-b-0">
+			<Link to={`/profile/${user.id}`} className="shrink-0" title="Xem trang cá nhân">
+				<Avatar src={profile?.avatar} name={shownName} size="sm" />
+			</Link>
 			<div className="min-w-0 flex-1">
 				<div className="flex flex-wrap items-center gap-1.5">
-					<span className="text-sm font-semibold text-ink">{user.username}</span>
+					<span className="text-sm font-semibold text-ink">{shownName}</span>
+					{profile && shownName !== user.username && (
+						<span className="text-xs text-muted">@{user.username}</span>
+					)}
 					{isSelf && <Badge>Bạn</Badge>}
 					{user.emailVerified ? (
 						<Badge tone="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
@@ -256,6 +268,8 @@ export default function UsersPage() {
 	const { user: me } = useAuth();
 	const [users, setUsers] = useState([]);
 	const [roles, setRoles] = useState([]);
+	// userId -> ProfileResponse, để hàng nào cũng có tên hiển thị và avatar.
+	const [profiles, setProfiles] = useState(() => new Map());
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(null);
 
@@ -282,6 +296,21 @@ export default function UsersPage() {
 			]);
 			setUsers(Array.isArray(userList) ? userList : []);
 			setRoles(Array.isArray(roleList) ? roleList : []);
+
+			// Hồ sơ nằm ở profile-service, tách hẳn khỏi tài khoản: UserResponse chỉ
+			// có username + email, không có họ tên hay avatar. GET /profile/users trả
+			// cả bảng trong MỘT lượt, nên ghép ở đây rẻ hơn hỏi từng người rất nhiều.
+			//
+			// Cố tình để sau và bắt lỗi riêng: đây là dữ liệu làm đẹp. profile-service
+			// chết hay đổi quyền thì bảng tài khoản vẫn phải dùng được.
+			try {
+				const profileList = await api.get(endpoints.profile.all);
+				setProfiles(
+					new Map((Array.isArray(profileList) ? profileList : []).map((p) => [p.userId, p])),
+				);
+			} catch {
+				setProfiles(new Map());
+			}
 		} catch (e) {
 			setError(e?.message || "Không tải được danh sách tài khoản.");
 		} finally {
@@ -426,6 +455,7 @@ export default function UsersPage() {
 							<UserRow
 								key={u.id}
 								user={u}
+								profile={profiles.get(u.id)}
 								isSelf={me?.id === u.id}
 								deactivated={deactivated.has(u.id)}
 								onEditRoles={setEditing}

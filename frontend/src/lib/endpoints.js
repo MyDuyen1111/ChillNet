@@ -42,6 +42,10 @@ export const endpoints = {
 		myProfile: svc("profile", "/users/my-profile"),
 		updateMyProfile: svc("profile", "/users/my-profile"),
 		byId: (id) => svc("profile", `/users/${id}`),
+		// Toàn bộ hồ sơ trong một lượt, không phân trang. Chỉ ROLE_ADMIN gọi được
+		// (ProfileService.getAllProfiles). Dùng để ghép tên hiển thị + avatar vào
+		// bảng tài khoản của khu quản trị, thay vì hỏi từng người một.
+		all: svc("profile", "/users"),
 		search: svc("profile", "/users/search"),
 		avatar: svc("profile", "/users/avatar"),
 		background: svc("profile", "/users/background"),
