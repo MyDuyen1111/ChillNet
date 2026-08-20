@@ -22,6 +22,21 @@ export const endpoints = {
 		changePassword: svc("identity", "/users/change-password"),
 	},
 
+	// ---- identity-service (quản trị tài khoản) ----
+	// Toàn bộ nhóm này gác `@PreAuthorize("hasRole('ADMIN')")` ở tầng service, nên
+	// gateway vẫn cho request đi qua và identity-service mới trả 403.
+	// Lưu ý `deleteUser` chỉ đặt isActive = false, không xoá hàng nào.
+	identity: {
+		users: svc("identity", "/users"),
+		userById: (id) => svc("identity", `/users/${id}`),
+		updateUser: (id) => svc("identity", `/users/${id}`),
+		deactivateUser: (id) => svc("identity", `/users/${id}`),
+		roles: svc("identity", "/roles"),
+		roleByName: (role) => svc("identity", `/roles/${role}`),
+		permissions: svc("identity", "/permissions"),
+		permissionByName: (permission) => svc("identity", `/permissions/${permission}`),
+	},
+
 	// ---- profile-service ----
 	profile: {
 		myProfile: svc("profile", "/users/my-profile"),
@@ -50,6 +65,11 @@ export const endpoints = {
 		savedPosts: svc("post", "/saved-posts"),
 		isSaved: (id) => svc("post", `/is-saved/${id}`),
 		share: (id) => svc("post", `/share/${id}`),
+		// Ai đã chia sẻ bài này. Trả PageResponse<PostResponse> nhưng mỗi hàng đại
+		// diện cho một lượt chia sẻ: userId/username/avatar là của người chia sẻ,
+		// `content` là lời nhắn họ viết kèm.
+		sharedPosts: (id) => svc("post", `/shared-posts/${id}`),
+		mySharedPosts: svc("post", "/my-shared-posts"),
 	},
 
 	// ---- interaction-service (likes + comments) ----
@@ -109,6 +129,7 @@ export const endpoints = {
 		messagesPaginated: svc("chat", "/messages/paginated"),
 		messageById: (id) => svc("chat", `/messages/${id}`),
 		readMessage: (id) => svc("chat", `/messages/${id}/read`),
+		readReceipts: (id) => svc("chat", `/messages/${id}/read-receipts`),
 		unreadCount: svc("chat", "/messages/unread-count"),
 	},
 
@@ -144,9 +165,14 @@ export const endpoints = {
 		unreadCount: svc("notification", "/notifications/unread-count"),
 	},
 
-	// ---- file-service (used indirectly; posts/profile upload via their own service) ----
+	// ---- file-service ----
+	// Đăng bài mới vẫn đi qua `/post/create` (post-service tự chuyển ảnh sang đây).
+	// Hai đường dưới dành cho trường hợp cần URL ảnh TRƯỚC khi gọi service khác —
+	// cụ thể là sửa bài viết: `PUT /post/{id}/json` nhận `imageUrls`, nên phải tự
+	// upload rồi ghép danh sách ảnh giữ lại với ảnh mới.
 	file: {
 		uploadFormData: svc("file", "/images/upload-form-data"),
+		uploadMultipleFormData: svc("file", "/images/upload-multiple-form-data"),
 	},
 
 	// ---- moderation-service (Trust & Safety) ----
