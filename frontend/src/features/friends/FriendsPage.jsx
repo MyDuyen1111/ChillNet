@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
 	ArrowClockwise,
@@ -15,6 +16,7 @@ import { Button, EmptyState, Modal, Skeleton, Tabs, useToast } from "../../compo
 import api from "../../lib/api";
 import endpoints from "../../lib/endpoints";
 import { useAuth } from "../../lib/auth";
+import { fetchProfiles } from "../../lib/profiles";
 import { displayName } from "../../lib/format";
 import UserCard from "./components/UserCard";
 
@@ -54,19 +56,6 @@ function otherUserId(tab, row, me) {
 	return row.userId === me ? row.friendId : row.userId;
 }
 
-// Fetch profiles for a set of user ids, tolerating per-item failures.
-async function enrichProfiles(ids) {
-	const unique = [...new Set(ids.filter(Boolean))];
-	const settled = await Promise.allSettled(
-		unique.map((id) => api.get(endpoints.profile.byId(id))),
-	);
-	const map = new Map();
-	unique.forEach((id, i) => {
-		if (settled[i].status === "fulfilled") map.set(id, settled[i].value);
-	});
-	return map;
-}
-
 // Which tab list an action mutates (for optimistic removal + count bumps).
 const REMOVES_FROM = {
 	accept: "received",
@@ -79,6 +68,7 @@ const REMOVES_FROM = {
 
 export default function FriendsPage() {
 	const { userId: me } = useAuth();
+	const navigate = useNavigate();
 	const toast = useToast();
 	const reduce = useReducedMotion();
 
@@ -118,7 +108,7 @@ export default function FriendsPage() {
 						id: r.id,
 						userId: otherUserId(tab, r, me),
 					}));
-					const profiles = await enrichProfiles(base.map((b) => b.userId));
+					const profiles = await fetchProfiles(base.map((b) => b.userId));
 					items = base.map((b) => ({ ...b, profile: profiles.get(b.userId) ?? null }));
 				}
 				setDataByTab((prev) => ({ ...prev, [tab]: { status: "success", items } }));
@@ -176,6 +166,14 @@ export default function FriendsPage() {
 			const uid = item.userId;
 			try {
 				switch (type) {
+					case "message": {
+						const conversation = await api.post(endpoints.chat.conversations, {
+							participantIds: [uid],
+						});
+						if (!conversation?.id) throw new Error("Không mở được cuộc trò chuyện.");
+						navigate(`/messages/${conversation.id}`);
+						break;
+					}
 					case "accept":
 						await api.post(endpoints.social.acceptFriend(uid));
 						removeItem("received", item.id);
@@ -231,7 +229,7 @@ export default function FriendsPage() {
 				throw e;
 			}
 		},
-		[toast],
+		[navigate, toast],
 	);
 
 	async function doRemoveFriend() {

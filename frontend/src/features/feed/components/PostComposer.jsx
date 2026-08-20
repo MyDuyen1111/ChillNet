@@ -17,6 +17,15 @@ import { displayName } from "../../../lib/format";
 const MAX_IMAGES = 4;
 const MAX_CAPTION = 2200;
 
+// post-service chỉ có hai mức (entity PrivacyType), không có "bạn bè".
+// Không gửi gì thì backend tự đặt PUBLIC, nhưng để mặc định ẩn như vậy nghĩa là
+// người dùng không bao giờ đăng được bài riêng tư — cột `privacy` có đấy mà
+// không ai đặt được.
+const PRIVACY_OPTIONS = [
+	{ value: "PUBLIC", label: "Công khai", hint: "Mọi người đều xem được" },
+	{ value: "PRIVATE", label: "Riêng tư", hint: "Chỉ mình bạn xem được" },
+];
+
 const count = (n) => n.toLocaleString("vi-VN");
 
 // Instagram's "create post" dialog, hai bước: bước chọn ảnh (drop zone toàn
@@ -31,6 +40,7 @@ export default function PostComposer({ open, onClose, onCreated }) {
 
 	const [step, setStep] = useState("pick"); // "pick" | "compose"
 	const [content, setContent] = useState("");
+	const [privacy, setPrivacy] = useState("PUBLIC");
 	const [attachments, setAttachments] = useState([]); // { file, url }
 	const [active, setActive] = useState(0);
 	const [dragging, setDragging] = useState(false);
@@ -45,6 +55,7 @@ export default function PostComposer({ open, onClose, onCreated }) {
 		if (open) return;
 		setStep("pick");
 		setContent("");
+		setPrivacy("PUBLIC");
 		setActive(0);
 		setDragging(false);
 		setAttachments((prev) => {
@@ -122,15 +133,41 @@ export default function PostComposer({ open, onClose, onCreated }) {
 
 	const canSubmit = (content.trim().length > 0 || attachments.length > 0) && !submitting;
 
+	// Tiền kiểm duyệt nội dung trước khi gửi.
+	//
+	// post-service vẫn tự gọi ai-service lúc tạo bài và từ chối khi severity =
+	// HIGH, nên đây KHÔNG phải lớp chặn — nó chỉ để người viết biết trước thay vì
+	// bấm "Chia sẻ" rồi ăn một lỗi CONTENT_VIOLATION không rõ vì sao. Cũng
+	// fail-open y như backend: gọi hỏng thì cứ đăng.
+	const preflight = async (text) => {
+		if (!text) return null;
+		try {
+			const result = await api.post(endpoints.ai.moderate, { text, context: "POST" });
+			return String(result?.severity || "").toUpperCase() === "HIGH" ? result : null;
+		} catch {
+			return null;
+		}
+	};
+
 	const submit = async () => {
 		if (!canSubmit) return;
 		setSubmitting(true);
 		try {
+			const violation = await preflight(content.trim());
+			if (violation) {
+				toast.error(
+					violation.reason
+						? `Nội dung có thể vi phạm tiêu chuẩn cộng đồng: ${violation.reason}`
+						: "Nội dung có thể vi phạm tiêu chuẩn cộng đồng. Hãy chỉnh lại trước khi đăng.",
+				);
+				return;
+			}
 			let created;
 			if (attachments.length > 0) {
 				const form = toFormData({
 					content: content.trim(),
 					images: attachments.map((a) => a.file),
+					privacy,
 				});
 				const res = await http.post(endpoints.post.create, form, {
 					headers: { "Content-Type": "multipart/form-data" },
@@ -139,6 +176,7 @@ export default function PostComposer({ open, onClose, onCreated }) {
 			} else {
 				created = await api.post(endpoints.post.createJson, {
 					content: content.trim(),
+					privacy,
 				});
 			}
 			// post-service nuốt lỗi upload ảnh (chỉ log rồi vẫn lưu bài), nên bài
@@ -311,7 +349,24 @@ export default function PostComposer({ open, onClose, onCreated }) {
 							className="min-h-[140px] w-full flex-1 resize-none bg-transparent px-4 text-sm text-ink placeholder:text-faint focus:outline-none"
 						/>
 
-						<div className="flex items-center justify-end px-4 pb-3 pt-1">
+						<div className="flex items-center justify-between gap-3 px-4 pb-3 pt-1">
+							<label className="flex items-center gap-2 text-xs text-muted">
+								<span className="sr-only">Quyền riêng tư</span>
+								<select
+									value={privacy}
+									onChange={(e) => setPrivacy(e.target.value)}
+									className="rounded border border-line bg-canvas px-2 py-1 text-xs text-ink focus:border-muted"
+								>
+									{PRIVACY_OPTIONS.map((o) => (
+										<option key={o.value} value={o.value}>
+											{o.label}
+										</option>
+									))}
+								</select>
+								<span className="hidden sm:inline">
+									{PRIVACY_OPTIONS.find((o) => o.value === privacy)?.hint}
+								</span>
+							</label>
 							<span className="text-xs text-faint">
 								{count(content.length)}/{count(MAX_CAPTION)}
 							</span>
