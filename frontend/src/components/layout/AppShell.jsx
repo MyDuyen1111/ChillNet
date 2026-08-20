@@ -14,6 +14,7 @@ import {
 	ShieldCheck,
 	SignOut,
 	Sun,
+	Users,
 	UsersThree,
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -25,16 +26,21 @@ import { cn } from "../../lib/cn";
 import { Avatar } from "../ui";
 
 // Instagram's rail order. `badge` marks the item that carries the unread pill.
+//
+// "Tìm kiếm" trỏ tới /search (tìm toàn cục qua profile/post/group); /friends là
+// một mục riêng vì nó quản lý quan hệ của chính mình chứ không phải tìm kiếm.
 const NAV = [
 	{ to: "/feed", label: "Trang chủ", icon: House },
-	{ to: "/friends", label: "Tìm kiếm", icon: MagnifyingGlass },
+	{ to: "/search", label: "Tìm kiếm", icon: MagnifyingGlass },
+	{ to: "/friends", label: "Bạn bè", icon: Users },
 	{ to: "/groups", label: "Nhóm", icon: UsersThree },
 	{ to: "/messages", label: "Tin nhắn", icon: PaperPlaneTilt },
 	{ to: "/notifications", label: "Thông báo", icon: Heart, badge: true },
 ];
 
 // The phone tab bar shows five destinations; notifications live in the top bar.
-const MOBILE_NAV = ["/feed", "/friends", "/groups", "/messages"];
+// Bạn bè bị bỏ ra khỏi thanh dưới cho đỡ chật — vào được từ trang Tìm kiếm.
+const MOBILE_NAV = ["/feed", "/search", "/groups", "/messages"];
 
 function useUnreadCount() {
 	const [count, setCount] = useState(0);
@@ -155,7 +161,7 @@ function MoreMenu({ compact, onLogout, isAdmin }) {
 						transition={{ duration: 0.15, ease: "easeOut" }}
 						className="absolute bottom-full left-0 mb-2 w-[266px] overflow-hidden rounded-xl bg-surface p-2 shadow-[0_4px_12px_rgba(0,0,0,0.15)] ring-1 ring-line"
 					>
-						<Link to="/profile" onClick={() => setOpen(false)} className={row}>
+						<Link to="/settings" onClick={() => setOpen(false)} className={row}>
 							Cài đặt <Gear size={18} />
 						</Link>
 						<Link to="/my-reports" onClick={() => setOpen(false)} className={row}>
@@ -211,8 +217,10 @@ export default function AppShell() {
 	// (the inbox), so the conversation list gets its space back.
 	const compact = location.pathname.startsWith("/messages");
 
-	const onLogout = () => {
-		logout();
+	const onLogout = async () => {
+		// `logout` revoke token ở identity-service rồi mới trả về; nó tự nuốt lỗi
+		// mạng nên chỉ cần chờ để không điều hướng giữa chừng.
+		await logout();
 		navigate("/login", { replace: true });
 	};
 	const onCreate = () => navigate("/feed?create=1");
