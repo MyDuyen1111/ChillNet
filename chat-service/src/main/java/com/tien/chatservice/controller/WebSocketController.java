@@ -11,7 +11,6 @@ import com.tien.chatservice.constant.ChatNotificationType;
 import com.tien.chatservice.dto.request.ChatMessageRequest;
 import com.tien.chatservice.dto.request.ChatNotification;
 import com.tien.chatservice.dto.request.TypingNotification;
-import com.tien.chatservice.dto.response.ChatMessageResponse;
 import com.tien.chatservice.repository.ConversationRepository;
 import com.tien.chatservice.service.ChatMessageService;
 
@@ -55,10 +54,7 @@ public class WebSocketController {
                     request.getMessage());
 
             // Service sẽ tự lấy userId từ SecurityContextHolder (đã được set bởi interceptor)
-            ChatMessageResponse response = chatMessageService.create(request);
-
-            response.setMe(false);
-            messagingTemplate.convertAndSend("/topic/conversation/" + request.getConversationId(), response);
+            chatMessageService.create(request);
         } catch (Exception e) {
             log.error("Lỗi khi gửi tin nhắn qua WebSocket: {}", e.getMessage(), e);
             if (userId != null) {

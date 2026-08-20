@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
-import { Avatar, Button, buttonClasses } from "../../../components/ui";
+import { Avatar, Button } from "../../../components/ui";
 import { displayName } from "../../../lib/format";
 
 // One person in a relationship list, rendered as an Instagram-style flat row:
@@ -63,9 +63,15 @@ export default function UserCard({ item, tab, onAction, onConfirmRemoveFriend })
 			<div className="flex shrink-0 items-center gap-2">
 				{tab === "friends" && (
 					<>
-						<Link to="/messages" className={buttonClasses({ variant: "secondary", size: "sm" })}>
+						<Button
+							variant="secondary"
+							size="sm"
+							loading={busy === "message"}
+							disabled={!!busy}
+							onClick={() => run("message")}
+						>
 							Nhắn tin
-						</Link>
+						</Button>
 						<Button variant="secondary" size="sm" onClick={() => onConfirmRemoveFriend(item)}>
 							Bạn bè
 						</Button>

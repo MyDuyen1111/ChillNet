@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +50,8 @@ public class ChatMessageService {
 
     ConversationRepository conversationRepository;
 
+    SimpMessagingTemplate messagingTemplate;
+
     public ChatMessageResponse create(ChatMessageRequest request) {
         String userId = getCurrentUserId();
         Conversation conversation = validateConversationAccess(request.getConversationId(), userId);
@@ -58,7 +61,9 @@ public class ChatMessageService {
 
         chatMessageRepository.save(chatMessage);
 
-        return toChatMessageResponse(chatMessage, userId);
+        ChatMessageResponse response = toChatMessageResponse(chatMessage, userId);
+        broadcastToParticipants(conversation, response);
+        return response;
     }
 
     public List<ChatMessageResponse> getMessages(String conversationId) {
@@ -192,6 +197,11 @@ public class ChatMessageService {
                 .avatar(profile.getAvatar())
                 .role(role)
                 .build();
+    }
+
+    private void broadcastToParticipants(Conversation conversation, ChatMessageResponse response) {
+        conversation.getParticipants().forEach(participant -> messagingTemplate.convertAndSendToUser(
+                participant.getUserId(), "/queue/messages", response));
     }
 
     private void validateSender(ChatMessage message, String userId) {

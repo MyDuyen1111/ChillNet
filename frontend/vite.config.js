@@ -31,8 +31,8 @@ export default defineConfig(({ mode }) => {
 					target: env.API_GATEWAY_URL ?? `http://localhost:${apiGatewayPort}`,
 					changeOrigin: true,
 				},
-				// STOMP-over-WebSocket endpoint for chat-service (through the gateway).
-				"/ws": {
+				// SockJS endpoint includes chat-service's servlet context path.
+				"/chat/ws": {
 					target: env.CHAT_SERVICE_URL ?? `http://localhost:${chatServicePort}`,
 					changeOrigin: true,
 					ws: true,
