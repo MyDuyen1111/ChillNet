@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { IdentificationCard, SquaresFour, UserCircle } from "@phosphor-icons/react";
+import {
+	BookmarkSimple,
+	IdentificationCard,
+	SquaresFour,
+	UserCircle,
+} from "@phosphor-icons/react";
 import { Button, EmptyState, Skeleton, Tabs } from "../../components/ui";
 import api from "../../lib/api";
 import endpoints from "../../lib/endpoints";
@@ -10,10 +15,22 @@ import EditProfileModal from "./components/EditProfileModal";
 import PostsTab from "./components/PostsTab";
 import AboutTab from "./components/AboutTab";
 
-const TABS = [
+// Tab "Đã lưu" chỉ hiện trên trang của chính mình: GET /post/saved-posts luôn
+// trả về bài đã lưu của người đang đăng nhập, không nhận userId, nên hiển thị nó
+// ở trang người khác sẽ là một lời nói dối.
+const BASE_TABS = [
 	{ key: "posts", label: "Bài viết", icon: SquaresFour },
 	{ key: "about", label: "Giới thiệu", icon: IdentificationCard },
 ];
+
+const SAVED_TAB = { key: "saved", label: "Đã lưu", icon: BookmarkSimple };
+
+const SAVED_EMPTY = {
+	icon: BookmarkSimple,
+	title: "Chưa có bài viết nào được lưu",
+	description:
+		"Nhấn biểu tượng dấu trang trên một bài viết để lưu lại. Chỉ mình bạn thấy danh sách này.",
+};
 
 function HeaderSkeleton() {
 	return (
@@ -155,15 +172,26 @@ export default function ProfilePage() {
 			/>
 
 			<div className="mt-8">
-				<Tabs items={TABS} value={tab} onChange={setTab} />
+				<Tabs
+					items={isSelf ? [BASE_TABS[0], SAVED_TAB, BASE_TABS[1]] : BASE_TABS}
+					value={tab}
+					onChange={setTab}
+				/>
 			</div>
 
 			<div className="py-6">
-				{tab === "posts" ? (
+				{tab === "posts" && (
 					<PostsTab userId={profile.userId} isSelf={isSelf} onCountChange={setPostCount} />
-				) : (
-					<AboutTab profile={profile} />
 				)}
+				{tab === "saved" && (
+					<PostsTab
+						userId={profile.userId}
+						isSelf
+						url={endpoints.post.savedPosts}
+						empty={SAVED_EMPTY}
+					/>
+				)}
+				{tab === "about" && <AboutTab profile={profile} />}
 			</div>
 
 			{isSelf && editOpen && (

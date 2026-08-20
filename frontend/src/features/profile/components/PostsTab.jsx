@@ -17,11 +17,16 @@ function GridSkeleton() {
 	);
 }
 
-// Paginated grid of a user's posts. `emptyLabel` differs for self vs others.
+// Lưới bài viết có phân trang. Mặc định là bài của một người
+// (GET /post/user/{id}), nhưng tab "Đã lưu" dùng lại đúng lưới này với
+// GET /post/saved-posts — hai endpoint trả cùng PageResponse<PostResponse> nên
+// chỉ cần đổi URL, không cần một component thứ hai.
+//
 // `onCountChange` reports the total post count up to ProfileHeader so it can
 // show it in the "bài viết" stat, without a second fetch.
-export default function PostsTab({ userId, isSelf, onCountChange }) {
+export default function PostsTab({ userId, isSelf, onCountChange, url, empty }) {
 	const toast = useToast();
+	const source = url || endpoints.post.byUser(userId);
 	const [posts, setPosts] = useState([]);
 	const [page, setPage] = useState(1);
 	const [totalPages, setTotalPages] = useState(1);
@@ -37,7 +42,7 @@ export default function PostsTab({ userId, isSelf, onCountChange }) {
 			first ? setLoading(true) : setLoadingMore(true);
 			setError(false);
 			try {
-				const res = await api.get(endpoints.post.byUser(userId), {
+				const res = await api.get(source, {
 					params: { page: nextPage, size: PAGE_SIZE },
 				});
 				if (id !== reqId.current) return; // a newer request superseded this one
@@ -57,7 +62,7 @@ export default function PostsTab({ userId, isSelf, onCountChange }) {
 				}
 			}
 		},
-		[userId, toast, onCountChange],
+		[source, toast, onCountChange],
 	);
 
 	useEffect(() => {
@@ -73,7 +78,7 @@ export default function PostsTab({ userId, isSelf, onCountChange }) {
 	if (error && posts.length === 0) {
 		return (
 			<EmptyState
-				icon={Camera}
+				icon={empty?.icon || Camera}
 				title="Không tải được bài viết"
 				description="Đã có lỗi xảy ra khi tải bài viết. Thử lại nhé."
 				action={
@@ -88,12 +93,13 @@ export default function PostsTab({ userId, isSelf, onCountChange }) {
 	if (posts.length === 0) {
 		return (
 			<EmptyState
-				icon={Camera}
-				title="Chia sẻ ảnh"
+				icon={empty?.icon || Camera}
+				title={empty?.title || "Chia sẻ ảnh"}
 				description={
-					isSelf
+					empty?.description ||
+					(isSelf
 						? "Khi bạn chia sẻ ảnh, chúng sẽ xuất hiện ở đây trên trang cá nhân của bạn."
-						: "Người dùng này chưa đăng bài viết nào."
+						: "Người dùng này chưa đăng bài viết nào.")
 				}
 			/>
 		);
