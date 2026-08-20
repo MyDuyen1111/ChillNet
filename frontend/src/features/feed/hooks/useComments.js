@@ -55,6 +55,11 @@ export function useComments(postId) {
 		setComments((prev) => [comment, ...prev]);
 	}, []);
 
+	// Gỡ bình luận vừa bị chủ nhân xoá khỏi danh sách đang hiển thị.
+	const removeComment = useCallback((commentId) => {
+		setComments((prev) => prev.filter((c) => c.id !== commentId));
+	}, []);
+
 	return {
 		comments,
 		status,
@@ -63,6 +68,7 @@ export function useComments(postId) {
 		loadMore,
 		reload: () => load(1),
 		addComment,
+		removeComment,
 	};
 }
 

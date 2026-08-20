@@ -13,6 +13,7 @@ export default function CommentSection({
 	onLoadMore,
 	postId,
 	onCountChange,
+	onDeleted,
 }) {
 	return (
 		<div className="space-y-4">
@@ -49,6 +50,7 @@ export default function CommentSection({
 							comment={comment}
 							postId={postId}
 							onCountChange={onCountChange}
+							onDeleted={onDeleted}
 						/>
 					))}
 				</div>

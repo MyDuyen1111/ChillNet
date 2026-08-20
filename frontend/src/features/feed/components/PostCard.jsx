@@ -8,11 +8,21 @@ import {
 	DotsThree,
 	Flag,
 	Heart,
+	Lock,
 	PaperPlaneTilt,
+	PencilSimple,
 	Smiley,
 	Trash,
 } from "@phosphor-icons/react";
-import { Avatar, Button, Card, IconButton, Modal, useToast } from "../../../components/ui";
+import {
+	Avatar,
+	Button,
+	Card,
+	IconButton,
+	Modal,
+	Textarea,
+	useToast,
+} from "../../../components/ui";
 import api from "../../../lib/api";
 import endpoints from "../../../lib/endpoints";
 import { useAuth } from "../../../lib/auth";
@@ -20,6 +30,7 @@ import { postDate, timeAgo } from "../../../lib/format";
 import { cn } from "../../../lib/cn";
 import { useComments } from "../hooks/useComments";
 import ReportModal from "../../moderation/ReportModal";
+import LikesModal from "./LikesModal";
 import PostImageGrid from "./PostImageGrid";
 import PostLink from "./PostLink";
 import ImageLightbox from "./ImageLightbox";
@@ -43,6 +54,12 @@ function usePostActions(post, onDeleted) {
 	const [deleting, setDeleting] = useState(false);
 	const [reposting, setReposting] = useState(false);
 	const [lightbox, setLightbox] = useState(-1);
+	// Nội dung giữ ở state để bản vừa sửa hiện ngay trên chính thẻ này.
+	const [content, setContent] = useState(post.content ?? "");
+	const [privacy, setPrivacy] = useState(post.privacy ?? "PUBLIC");
+	const [editOpen, setEditOpen] = useState(false);
+	const [savingEdit, setSavingEdit] = useState(false);
+	const [likesOpen, setLikesOpen] = useState(false);
 
 	const isOwner = post.isOwnerPost ?? (post.userId != null && post.userId === userId);
 
@@ -113,6 +130,30 @@ function usePostActions(post, onDeleted) {
 		}
 	};
 
+	// Sửa bằng endpoint JSON chứ không phải multipart: gửi mỗi `content` thì
+	// backend giữ nguyên imageUrls (updatePostInternal chỉ thay ảnh khi được
+	// truyền ảnh mới). Đây cũng là lý do màn sửa chỉ đổi chú thích, giống
+	// Instagram — thay ảnh sẽ phải upload lại toàn bộ.
+	const saveEdit = async (nextContent, nextPrivacy) => {
+		const text = (nextContent ?? "").trim();
+		if (!text || savingEdit) return;
+		setSavingEdit(true);
+		try {
+			const updated = await api.put(endpoints.post.updateJson(post.id), {
+				content: text,
+				privacy: nextPrivacy,
+			});
+			setContent(updated?.content ?? text);
+			setPrivacy(updated?.privacy ?? nextPrivacy);
+			setEditOpen(false);
+			toast.success("Đã cập nhật bài viết.");
+		} catch (err) {
+			toast.error(err?.message || "Không cập nhật được bài viết.");
+		} finally {
+			setSavingEdit(false);
+		}
+	};
+
 	const bumpCommentCount = (delta) => setCommentCount((c) => Math.max(0, c + delta));
 
 	return {
@@ -138,12 +179,20 @@ function usePostActions(post, onDeleted) {
 		reposting,
 		doDelete,
 		bumpCommentCount,
+		content,
+		privacy,
+		likesOpen,
+		setLikesOpen,
+		editOpen,
+		setEditOpen,
+		savingEdit,
+		saveEdit,
 	};
 }
 
 // Kebab menu. Chủ bài viết thấy "Xoá"; người khác thấy "Báo cáo" — nên menu này
 // giờ luôn được render, không còn phụ thuộc vào isOwner như trước.
-function PostMenu({ menuOpen, setMenuOpen, isOwner, onDeleteClick, onReportClick }) {
+function PostMenu({ menuOpen, setMenuOpen, isOwner, onEditClick, onDeleteClick, onReportClick }) {
 	return (
 		<div className="relative shrink-0">
 			<IconButton label="Tuỳ chọn bài viết" onClick={() => setMenuOpen((v) => !v)}>
@@ -161,6 +210,18 @@ function PostMenu({ menuOpen, setMenuOpen, isOwner, onDeleteClick, onReportClick
 							className="absolute right-0 top-9 z-20 w-44 overflow-hidden rounded-xl bg-surface py-1 shadow-[0_4px_12px_rgba(0,0,0,0.15)] ring-1 ring-line"
 						>
 							{isOwner ? (
+								<>
+								<button
+									type="button"
+									onClick={() => {
+										setMenuOpen(false);
+										onEditClick();
+									}}
+									className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-hover"
+								>
+									<PencilSimple size={16} />
+									Chỉnh sửa
+								</button>
 								<button
 									type="button"
 									onClick={() => {
@@ -172,6 +233,7 @@ function PostMenu({ menuOpen, setMenuOpen, isOwner, onDeleteClick, onReportClick
 									<Trash size={16} />
 									Xoá bài viết
 								</button>
+								</>
 							) : (
 								<button
 									type="button"
@@ -190,6 +252,81 @@ function PostMenu({ menuOpen, setMenuOpen, isOwner, onDeleteClick, onReportClick
 				)}
 			</AnimatePresence>
 		</div>
+	);
+}
+
+// Sửa bài viết = sửa chú thích. Ảnh không đổi được ở đây: endpoint multipart
+// thay TOÀN BỘ danh sách ảnh, nên "sửa ảnh" thực chất là đăng lại — để nguyên
+// còn hơn cho người dùng một nút xoá sạch ảnh mà họ không ngờ tới.
+function EditPostModal({ open, onClose, initialContent, initialPrivacy, onSave, loading }) {
+	const [draft, setDraft] = useState(initialContent ?? "");
+	const [privacy, setPrivacy] = useState(initialPrivacy ?? "PUBLIC");
+
+	// Mở lại modal sau khi đã sửa thì phải bắt đầu từ nội dung mới nhất.
+	useEffect(() => {
+		if (!open) return;
+		setDraft(initialContent ?? "");
+		setPrivacy(initialPrivacy ?? "PUBLIC");
+	}, [open, initialContent, initialPrivacy]);
+
+	return (
+		<Modal open={open} onClose={() => !loading && onClose()} title="Chỉnh sửa bài viết" size="md">
+			<Textarea
+				rows={6}
+				maxLength={5000}
+				value={draft}
+				onChange={(e) => setDraft(e.target.value)}
+				placeholder="Bạn đang nghĩ gì?"
+				aria-label="Nội dung bài viết"
+			/>
+			<p className="mt-2 text-xs text-muted">
+				Ảnh của bài viết được giữ nguyên. Để đổi ảnh, hãy đăng một bài mới.
+			</p>
+			<label className="mt-4 flex items-center gap-2 text-sm text-muted">
+				Quyền riêng tư
+				<select
+					value={privacy}
+					onChange={(e) => setPrivacy(e.target.value)}
+					className="rounded border border-line bg-canvas px-2 py-1 text-sm text-ink focus:border-muted"
+				>
+					<option value="PUBLIC">Công khai</option>
+					<option value="PRIVATE">Riêng tư</option>
+				</select>
+			</label>
+			<div className="mt-4 flex justify-end gap-2">
+				<Button variant="ghost" onClick={onClose} disabled={loading}>
+					Huỷ
+				</Button>
+				<Button
+					onClick={() => onSave(draft, privacy)}
+					loading={loading}
+					disabled={
+						!draft.trim() || (draft === initialContent && privacy === initialPrivacy)
+					}
+				>
+					Lưu thay đổi
+				</Button>
+			</div>
+		</Modal>
+	);
+}
+
+// post-service trả originalPostUserId/Username/Avatar cho bài được đăng lại,
+// nhưng giao diện chưa từng đọc tới, nên một bài chia sẻ trông y hệt bài gốc và
+// tác giả thật bị mất tên.
+function SharedFrom({ post }) {
+	if (!post.originalPostUserId) return null;
+	return (
+		<span className="flex items-center gap-1 text-xs text-muted">
+			<ArrowsClockwise size={12} />
+			Đã chia sẻ bài viết của{" "}
+			<Link
+				to={`/profile/${post.originalPostUserId}`}
+				className="font-semibold text-ink hover:text-muted"
+			>
+				{post.originalPostUsername || "một người dùng"}
+			</Link>
+		</span>
 	);
 }
 
@@ -287,6 +424,7 @@ function ActionBar({
 	onToggleSave,
 	onShare,
 	onRepost,
+	onShowLikes,
 	reposting,
 	commentSlot,
 }) {
@@ -302,8 +440,18 @@ function ActionBar({
 				)}
 			>
 				<Heart size={24} weight={liked ? "fill" : "regular"} />
-				<ActionCount value={likeCount} />
 			</button>
+			{/* Con số tách khỏi nút tim: bấm vào số là xem AI đã thích
+			    (GET /likes/post/{id}), bấm vào tim mới là thích/bỏ thích. */}
+			{likeCount > 0 && (
+				<button
+					type="button"
+					onClick={onShowLikes}
+					className="-ml-2.5 text-sm font-semibold text-ink transition-opacity hover:opacity-60"
+				>
+					{likeCount}
+				</button>
+			)}
 			{commentSlot}
 			<button
 				type="button"
@@ -449,27 +597,34 @@ function FeedPostCard({ post, onDeleted }) {
 				<Link to={`/profile/${post.userId}`} className="shrink-0">
 					<Avatar src={post.userAvatar} name={post.username} size="sm" />
 				</Link>
-				<div className="flex min-w-0 flex-1 items-center gap-1.5">
-					<Link
-						to={`/profile/${post.userId}`}
-						className="truncate text-sm font-semibold text-ink hover:text-muted"
-					>
-						{post.username || "Người dùng"}
-					</Link>
-					<span className="text-xs text-muted" aria-hidden="true">
-						·
-					</span>
-					<PostLink
-						postId={post.id}
-						className="shrink-0 text-xs text-muted hover:text-ink"
-					>
-						{timeAgo(post.createdDate || post.created)}
-					</PostLink>
+				<div className="flex min-w-0 flex-1 flex-col">
+					<div className="flex min-w-0 items-center gap-1.5">
+						<Link
+							to={`/profile/${post.userId}`}
+							className="truncate text-sm font-semibold text-ink hover:text-muted"
+						>
+							{post.username || "Người dùng"}
+						</Link>
+						<span className="text-xs text-muted" aria-hidden="true">
+							·
+						</span>
+						<PostLink
+							postId={post.id}
+							className="shrink-0 text-xs text-muted hover:text-ink"
+						>
+							{timeAgo(post.createdDate || post.created)}
+						</PostLink>
+						{a.privacy === "PRIVATE" && (
+							<Lock size={12} className="shrink-0 text-muted" title="Bài viết riêng tư" />
+						)}
+					</div>
+					<SharedFrom post={post} />
 				</div>
 				<PostMenu
 					menuOpen={a.menuOpen}
 					setMenuOpen={a.setMenuOpen}
 					isOwner={a.isOwner}
+					onEditClick={() => a.setEditOpen(true)}
 					onDeleteClick={() => a.setConfirmOpen(true)}
 					onReportClick={() => a.setReportOpen(true)}
 				/>
@@ -489,7 +644,7 @@ function FeedPostCard({ post, onDeleted }) {
 					<PostCaption
 						userId={post.userId}
 						username={post.username}
-						content={post.content}
+						content={a.content}
 					/>
 				</div>
 			)}
@@ -503,6 +658,7 @@ function FeedPostCard({ post, onDeleted }) {
 				onRepost={a.doRepost}
 				reposting={a.reposting}
 				likeCount={a.likeCount}
+				onShowLikes={() => a.setLikesOpen(true)}
 				shareCount={a.shareCount}
 				commentSlot={
 					<PostLink
@@ -522,7 +678,7 @@ function FeedPostCard({ post, onDeleted }) {
 						<PostCaption
 							userId={post.userId}
 							username={post.username}
-							content={post.content}
+							content={a.content}
 						/>
 					)}
 					{a.commentCount > 0 && (
@@ -552,6 +708,15 @@ function FeedPostCard({ post, onDeleted }) {
 				onIndexChange={a.setLightbox}
 			/>
 
+			<EditPostModal
+				open={a.editOpen}
+				onClose={() => a.setEditOpen(false)}
+				initialContent={a.content}
+				initialPrivacy={a.privacy}
+				onSave={a.saveEdit}
+				loading={a.savingEdit}
+			/>
+
 			<DeleteConfirmModal
 				open={a.confirmOpen}
 				onClose={() => a.setConfirmOpen(false)}
@@ -564,6 +729,12 @@ function FeedPostCard({ post, onDeleted }) {
 				onClose={() => a.setReportOpen(false)}
 				targetType="POST"
 				targetId={post.id}
+			/>
+
+			<LikesModal
+				open={a.likesOpen}
+				onClose={() => a.setLikesOpen(false)}
+				postId={post.id}
 			/>
 		</Card>
 	);
@@ -579,7 +750,8 @@ function PostDetailCard({ post, onDeleted }) {
 	const ratio = useImageRatio(images[0]);
 	const composerRef = useRef(null);
 
-	const { comments, status, hasNext, loadingMore, loadMore, addComment } = useComments(post.id);
+	const { comments, status, hasNext, loadingMore, loadMore, addComment, removeComment } =
+		useComments(post.id);
 
 	const [commentText, setCommentText] = useState("");
 	const [sending, setSending] = useState(false);
@@ -651,13 +823,13 @@ function PostDetailCard({ post, onDeleted }) {
 				</div>
 
 				<div className="flex-1 overflow-y-auto px-4 py-4">
-					{post.content && (
+					{a.content && (
 						<div className="mb-4 flex items-start gap-3">
 							<Avatar src={post.userAvatar} name={post.username} size="sm" />
 							<PostCaption
 								userId={post.userId}
 								username={post.username}
-								content={post.content}
+								content={a.content}
 								clamp={false}
 							/>
 						</div>
@@ -670,6 +842,7 @@ function PostDetailCard({ post, onDeleted }) {
 						onLoadMore={loadMore}
 						postId={post.id}
 						onCountChange={a.bumpCommentCount}
+						onDeleted={removeComment}
 					/>
 				</div>
 
@@ -683,6 +856,7 @@ function PostDetailCard({ post, onDeleted }) {
 						onRepost={a.doRepost}
 						reposting={a.reposting}
 						likeCount={a.likeCount}
+						onShowLikes={() => a.setLikesOpen(true)}
 						shareCount={a.shareCount}
 						commentSlot={
 							<button
@@ -715,6 +889,15 @@ function PostDetailCard({ post, onDeleted }) {
 				</div>
 			</div>
 
+			<EditPostModal
+				open={a.editOpen}
+				onClose={() => a.setEditOpen(false)}
+				initialContent={a.content}
+				initialPrivacy={a.privacy}
+				onSave={a.saveEdit}
+				loading={a.savingEdit}
+			/>
+
 			<DeleteConfirmModal
 				open={a.confirmOpen}
 				onClose={() => a.setConfirmOpen(false)}
@@ -727,6 +910,12 @@ function PostDetailCard({ post, onDeleted }) {
 				onClose={() => a.setReportOpen(false)}
 				targetType="POST"
 				targetId={post.id}
+			/>
+
+			<LikesModal
+				open={a.likesOpen}
+				onClose={() => a.setLikesOpen(false)}
+				postId={post.id}
 			/>
 		</Card>
 	);

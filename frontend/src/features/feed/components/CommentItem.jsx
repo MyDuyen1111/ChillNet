@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Heart } from "@phosphor-icons/react";
-import { Avatar, useToast } from "../../../components/ui";
+import { Avatar, Button, Modal, useToast } from "../../../components/ui";
 import api from "../../../lib/api";
 import endpoints from "../../../lib/endpoints";
 import { useAuth } from "../../../lib/auth";
@@ -13,13 +13,23 @@ import ReportModal from "../../moderation/ReportModal";
 // the response show immediately; the rest load on demand from `/replies`.
 // Instagram style: no bubble, inline "username content", a small meta row and
 // a tiny heart parked at the far right of the row.
-export default function CommentItem({ comment, postId, depth = 0, onCountChange }) {
+export default function CommentItem({ comment, postId, depth = 0, onCountChange, onDeleted }) {
 	const toast = useToast();
 	const { userId } = useAuth();
 
 	const [reportOpen, setReportOpen] = useState(false);
 	const [liked, setLiked] = useState(Boolean(comment.isLiked));
 	const [likeCount, setLikeCount] = useState(comment.likeCount ?? 0);
+
+	// Nội dung giữ ở state để bản sửa hiện ngay, không phải tải lại cả luồng.
+	const [content, setContent] = useState(comment.content ?? "");
+	const [editing, setEditing] = useState(false);
+	const [draft, setDraft] = useState(comment.content ?? "");
+	const [saving, setSaving] = useState(false);
+	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [deleting, setDeleting] = useState(false);
+
+	const isOwner = comment.userId === userId;
 
 	const [replies, setReplies] = useState(comment.replies ?? []);
 	const [replyCount, setReplyCount] = useState(comment.replyCount ?? comment.replies?.length ?? 0);
@@ -44,6 +54,40 @@ export default function CommentItem({ comment, postId, depth = 0, onCountChange 
 			setLiked(!next);
 			setLikeCount((c) => c + (next ? -1 : 1));
 			toast.error(err?.message || "Không thực hiện được, thử lại.");
+		}
+	};
+
+	const saveEdit = async () => {
+		const text = draft.trim();
+		if (!text || saving) return;
+		if (text === content) return setEditing(false);
+		setSaving(true);
+		try {
+			const updated = await api.put(endpoints.interaction.commentById(comment.id), {
+				content: text,
+			});
+			setContent(updated?.content ?? text);
+			setEditing(false);
+		} catch (err) {
+			toast.error(err?.message || "Không sửa được bình luận.");
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const remove = async () => {
+		setDeleting(true);
+		try {
+			await api.delete(endpoints.interaction.commentById(comment.id));
+			// Backend xoá luôn mọi phản hồi của bình luận này, nên số đếm trên bài
+			// phải trừ cả chúng — nếu chỉ trừ 1 thì con số hiển thị sẽ lệch cho đến
+			// lần tải lại trang.
+			onCountChange?.(-(1 + Math.max(replyCount, replies.length)));
+			onDeleted?.(comment.id);
+			setConfirmOpen(false);
+		} catch (err) {
+			toast.error(err?.message || "Không xoá được bình luận.");
+			setDeleting(false);
 		}
 	};
 
@@ -95,15 +139,55 @@ export default function CommentItem({ comment, postId, depth = 0, onCountChange 
 			</Link>
 
 			<div className="min-w-0 flex-1">
-				<p className="whitespace-pre-wrap break-words text-sm text-ink">
-					<Link
-						to={`/profile/${comment.userId}`}
-						className="font-semibold text-ink hover:text-muted"
-					>
-						{comment.username || "Người dùng"}
-					</Link>{" "}
-					{comment.content}
-				</p>
+				{editing ? (
+					<div className="flex items-center gap-2 border-b border-line-soft pb-2">
+						<input
+							value={draft}
+							onChange={(e) => setDraft(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter" && !e.shiftKey) {
+									e.preventDefault();
+									saveEdit();
+								}
+								if (e.key === "Escape") {
+									setDraft(content);
+									setEditing(false);
+								}
+							}}
+							autoFocus
+							aria-label="Sửa bình luận"
+							className="h-8 w-full bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none"
+						/>
+						<button
+							type="button"
+							onClick={saveEdit}
+							disabled={saving || !draft.trim()}
+							className="shrink-0 text-sm font-semibold text-accent disabled:opacity-40"
+						>
+							Lưu
+						</button>
+						<button
+							type="button"
+							onClick={() => {
+								setDraft(content);
+								setEditing(false);
+							}}
+							className="shrink-0 text-sm font-semibold text-muted hover:text-ink"
+						>
+							Huỷ
+						</button>
+					</div>
+				) : (
+					<p className="whitespace-pre-wrap break-words text-sm text-ink">
+						<Link
+							to={`/profile/${comment.userId}`}
+							className="font-semibold text-ink hover:text-muted"
+						>
+							{comment.username || "Người dùng"}
+						</Link>{" "}
+						{content}
+					</p>
+				)}
 
 				<div className="mt-1 flex items-center gap-3 text-xs text-muted">
 					<span>{timeAgo(comment.createdAt)}</span>
@@ -117,7 +201,28 @@ export default function CommentItem({ comment, postId, depth = 0, onCountChange 
 							Trả lời
 						</button>
 					)}
-					{comment.userId !== userId && (
+					{isOwner && !editing && (
+						<>
+							<button
+								type="button"
+								onClick={() => {
+									setDraft(content);
+									setEditing(true);
+								}}
+								className="font-semibold hover:text-ink"
+							>
+								Sửa
+							</button>
+							<button
+								type="button"
+								onClick={() => setConfirmOpen(true)}
+								className="font-semibold hover:text-like"
+							>
+								Xoá
+							</button>
+						</>
+					)}
+					{!isOwner && (
 						<button
 							type="button"
 							onClick={() => setReportOpen(true)}
@@ -176,6 +281,10 @@ export default function CommentItem({ comment, postId, depth = 0, onCountChange 
 								postId={postId}
 								depth={depth + 1}
 								onCountChange={onCountChange}
+								onDeleted={(id) => {
+									setReplies((prev) => prev.filter((r) => r.id !== id));
+									setReplyCount((c) => Math.max(0, c - 1));
+								}}
 							/>
 						))}
 					</div>
@@ -197,6 +306,27 @@ export default function CommentItem({ comment, postId, depth = 0, onCountChange 
 				targetType="COMMENT"
 				targetId={comment.id}
 			/>
+
+			<Modal
+				open={confirmOpen}
+				onClose={() => !deleting && setConfirmOpen(false)}
+				title="Xoá bình luận"
+				size="sm"
+			>
+				<p className="text-sm text-muted">
+					{replyCount > 0
+						? `Bình luận này và ${replyCount} phản hồi của nó sẽ bị xoá vĩnh viễn.`
+						: "Bình luận sẽ bị xoá vĩnh viễn."}
+				</p>
+				<div className="mt-4 flex justify-end gap-2">
+					<Button variant="ghost" onClick={() => setConfirmOpen(false)} disabled={deleting}>
+						Huỷ
+					</Button>
+					<Button variant="danger" onClick={remove} loading={deleting}>
+						Xoá
+					</Button>
+				</div>
+			</Modal>
 		</div>
 	);
 }
