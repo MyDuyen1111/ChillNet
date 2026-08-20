@@ -14,6 +14,7 @@ import {
 	ShieldCheck,
 	SignOut,
 	Sun,
+	UserGear,
 	Users,
 	UsersThree,
 } from "@phosphor-icons/react";
@@ -168,13 +169,22 @@ function MoreMenu({ compact, onLogout, isAdmin }) {
 							Báo cáo của tôi <Flag size={18} />
 						</Link>
 						{isAdmin && (
-							<Link
-								to="/admin/moderation"
-								onClick={() => setOpen(false)}
-								className={row}
-							>
-								Kiểm duyệt <ShieldCheck size={18} />
-							</Link>
+							<>
+								<Link
+									to="/admin/moderation"
+									onClick={() => setOpen(false)}
+									className={row}
+								>
+									Kiểm duyệt <ShieldCheck size={18} />
+								</Link>
+								<Link
+									to="/admin/users"
+									onClick={() => setOpen(false)}
+									className={row}
+								>
+									Quản lý tài khoản <UserGear size={18} />
+								</Link>
+							</>
 						)}
 						<Link
 							to="/policies/community"

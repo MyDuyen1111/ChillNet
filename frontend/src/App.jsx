@@ -31,6 +31,8 @@ const PrivacyPolicyPage = lazy(() => import("./features/policies/PrivacyPolicyPa
 const ModerationQueuePage = lazy(() => import("./features/admin/ModerationQueuePage"));
 const CaseDetailPage = lazy(() => import("./features/admin/CaseDetailPage"));
 const AppealsPage = lazy(() => import("./features/admin/AppealsPage"));
+const UsersPage = lazy(() => import("./features/admin/UsersPage"));
+const RolesPage = lazy(() => import("./features/admin/RolesPage"));
 
 function PageFallback() {
 	return (
@@ -109,6 +111,22 @@ export default function App() {
 							element={
 								<AdminRoute>
 									<AppealsPage />
+								</AdminRoute>
+							}
+						/>
+						<Route
+							path="/admin/users"
+							element={
+								<AdminRoute>
+									<UsersPage />
+								</AdminRoute>
+							}
+						/>
+						<Route
+							path="/admin/roles"
+							element={
+								<AdminRoute>
+									<RolesPage />
 								</AdminRoute>
 							}
 						/>

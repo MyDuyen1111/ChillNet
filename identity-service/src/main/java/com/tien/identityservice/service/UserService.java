@@ -52,11 +52,33 @@ public class UserService {
     public UserResponse updateUser(String userId, UserUpdateRequest request) {
         User user = userRepository.findById(userId).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-        userMapper.updateUser(user, request);
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        // Giữ lại giá trị đang có trước khi mapper chạy: MapStruct sinh ra updateUser() theo
+        // chiến lược mặc định SET_TO_NULL, nên một request chỉ gửi roles vẫn ghi đè password và
+        // email thành null (email lại là NOT NULL nên chuyến save sẽ vỡ ở tầng DB).
+        String currentPassword = user.getPassword();
+        String currentEmail = user.getEmail();
 
-        List<Role> roles = roleRepository.findAllById(request.getRoles());
-        user.setRoles(new HashSet<>(roles));
+        userMapper.updateUser(user, request);
+
+        // Form admin là form sửa từng phần: bỏ trống ô mật khẩu nghĩa là "không đổi", không phải
+        // "đặt mật khẩu thành rỗng". Nếu encode thẳng thì tài khoản bị khoá vĩnh viễn vì không ai
+        // biết mật khẩu mới, hoặc NPE khi client không gửi trường này.
+        if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
+        } else {
+            user.setPassword(currentPassword);
+        }
+
+        if (request.getEmail() == null || request.getEmail().isBlank()) {
+            user.setEmail(currentEmail);
+        }
+
+        // Tương tự với roles: request không gửi roles là "giữ nguyên vai trò". Trước đây
+        // findAllById(null) trả về danh sách rỗng và user bị tước sạch quyền chỉ vì admin sửa email.
+        if (request.getRoles() != null) {
+            List<Role> roles = roleRepository.findAllById(request.getRoles());
+            user.setRoles(new HashSet<>(roles));
+        }
 
         return userMapper.toUserResponse(userRepository.save(user));
     }
